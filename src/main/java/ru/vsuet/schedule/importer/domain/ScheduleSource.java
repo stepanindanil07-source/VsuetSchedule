@@ -7,6 +7,8 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 /** One published schedule file: which unit it belongs to, which parser reads it and where it is downloaded from. */
 @Entity
@@ -37,6 +39,11 @@ public class ScheduleSource {
     @Column(name = "academic_period_id")
     private Long academicPeriodId;
 
+    /** Course of every group of this file when the file itself does not say (1-6), or {@code null}. */
+    @JdbcTypeCode(SqlTypes.SMALLINT)
+    @Column(name = "default_course")
+    private Integer defaultCourse;
+
     protected ScheduleSource() {
     }
 
@@ -53,6 +60,14 @@ public class ScheduleSource {
 
     public void pinToPeriod(Long periodId) {
         this.academicPeriodId = periodId;
+    }
+
+    public void setDefaultCourse(Integer course) {
+        this.defaultCourse = course;
+    }
+
+    public Integer getDefaultCourse() {
+        return defaultCourse;
     }
 
     public void markImported(String sha256, Instant now) {

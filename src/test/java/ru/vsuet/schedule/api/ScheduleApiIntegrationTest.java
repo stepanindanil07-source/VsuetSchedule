@@ -181,6 +181,32 @@ class ScheduleApiIntegrationTest {
     }
 
     @Test
+    void weeklyLessonsHaveANullDateAndDatedOnesComeAfterThemOrderedByDate() throws Exception {
+        long autumnId = periods.findByYearFromAndTerm((short) 2026, AcademicTerm.AUTUMN).orElseThrow().getId();
+        long runId = runs.findAll().getFirst().getId();
+        StudyGroup zaoGroup = groups.save(new StudyGroup(uits.getId(), "ЗАП-22", sources.findAll().getFirst().getId()));
+        // saved out of order on purpose; 2026-10-13 is a Tuesday, 2026-10-12 a Monday
+        entries.save(new ScheduleEntry(zaoGroup.getId(), autumnId, runId, DayOfWeek.TUESDAY, LocalTime.of(8, 0),
+                LocalTime.of(9, 35), WeekType.EVERY_WEEK, null, "Экономика", LessonType.EXAM, "Иванов И.И.", "5-37", "raw",
+                "Список 8", "A1", LocalDate.of(2026, 10, 13)));
+        entries.save(new ScheduleEntry(zaoGroup.getId(), autumnId, runId, DayOfWeek.MONDAY, LocalTime.of(9, 45),
+                LocalTime.of(11, 20), WeekType.EVERY_WEEK, 2, "Физика", LessonType.CREDIT, "Петров П.П.", "12", "raw",
+                "Список 8", "A2", LocalDate.of(2026, 10, 12)));
+
+        mvc.perform(get("/api/v1/groups/{id}/schedule", zaoGroup.getId()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.lessons[*].subject").value(contains("Физика", "Экономика")))
+                .andExpect(jsonPath("$.lessons[0].date").value("2026-10-12"))
+                .andExpect(jsonPath("$.lessons[0].dayOfWeek").value("MONDAY"))
+                .andExpect(jsonPath("$.lessons[0].weekType").value("EVERY_WEEK"))
+                .andExpect(jsonPath("$.lessons[0].lessonType").value("CREDIT"))
+                .andExpect(jsonPath("$.lessons[1].date").value("2026-10-13"))
+                .andExpect(jsonPath("$.lessons[1].lessonType").value("EXAM"));
+        mvc.perform(get("/api/v1/groups/{id}/schedule", group.getId()))
+                .andExpect(jsonPath("$.lessons[0].date").value(nullValue()));
+    }
+
+    @Test
     void doesNotExposeInternalFields() throws Exception {
         mvc.perform(get("/api/v1/groups/{id}/schedule", group.getId()))
                 .andExpect(jsonPath("$.lessons[0].rawText").doesNotExist())

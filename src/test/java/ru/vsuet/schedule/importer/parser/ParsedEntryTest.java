@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.DayOfWeek;
+import java.time.LocalDate;
 import java.time.LocalTime;
 import org.junit.jupiter.api.Test;
 import ru.vsuet.schedule.schedule.domain.LessonType;
@@ -53,5 +54,34 @@ class ParsedEntryTest {
         assertThatThrownBy(() -> entry(LocalTime.of(9, 45), LocalTime.of(11, 20), null, "  ", null, null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("subject");
+    }
+
+    private static ParsedEntry dated(DayOfWeek day, WeekType week, LocalDate date) {
+        return new ParsedEntry("ЗАП-22", day, LocalTime.of(8, 0), LocalTime.of(9, 35), week, null, "Физика",
+                LessonType.EXAM, null, null, "экз. Физика", LOCATION, date);
+    }
+
+    @Test
+    void weeklyLessonHasNoDate() {
+        assertThat(entry(LocalTime.of(9, 45), LocalTime.of(11, 20), null, "Физика", null, null).date()).isNull();
+    }
+
+    @Test
+    void acceptsOneOffLessonWhoseDateAgreesWithItsDay() {
+        ParsedEntry e = dated(DayOfWeek.MONDAY, WeekType.EVERY_WEEK, LocalDate.of(2026, 10, 12));
+
+        assertThat(e.date()).isEqualTo(LocalDate.of(2026, 10, 12));
+    }
+
+    @Test
+    void rejectsDateThatIsAnotherDayOfTheWeek() {
+        assertThatThrownBy(() -> dated(DayOfWeek.TUESDAY, WeekType.EVERY_WEEK, LocalDate.of(2026, 10, 12)))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("2026-10-12");
+    }
+
+    @Test
+    void rejectsNumeratorOrDenominatorOnADatedLesson() {
+        assertThatThrownBy(() -> dated(DayOfWeek.MONDAY, WeekType.NUMERATOR, LocalDate.of(2026, 10, 12)))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("numerator");
     }
 }

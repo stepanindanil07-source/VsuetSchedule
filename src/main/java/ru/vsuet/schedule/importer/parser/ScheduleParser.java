@@ -20,4 +20,12 @@ public interface ScheduleParser {
      * @throws ScheduleParseException if the file cannot be interpreted at all
      */
     ParsedSchedule parse(InputStream file);
+
+    /**
+     * Parses with what the importer knows about the source. Formats that are fully described by their file
+     * (all of them but the correspondence one) ignore the context.
+     */
+    default ParsedSchedule parse(InputStream file, ParseContext context) {
+        return parse(file);
+    }
 }

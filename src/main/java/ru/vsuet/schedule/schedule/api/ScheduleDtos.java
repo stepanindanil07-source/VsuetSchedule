@@ -47,6 +47,9 @@ final class ScheduleDtos {
     @Schema(description = "One lesson")
     record LessonDto(
             DayOfWeek dayOfWeek,
+            @Schema(description = "Set for a one-off lesson on a calendar date (correspondence students); then dayOfWeek is "
+                    + "that date's day and weekType is EVERY_WEEK. Null for a weekly lesson.", nullable = true)
+            LocalDate date,
             @JsonFormat(pattern = "HH:mm") @Schema(type = "string", example = "08:00") LocalTime startTime,
             @JsonFormat(pattern = "HH:mm") @Schema(type = "string", example = "09:35") LocalTime endTime,
             @Schema(description = "NUMERATOR, DENOMINATOR or EVERY_WEEK") WeekType weekType,
@@ -58,7 +61,7 @@ final class ScheduleDtos {
             @Schema(description = "Room(s) as written in the source, several separated by a comma", nullable = true)
             String room) {
         static LessonDto of(ScheduleEntry e) {
-            return new LessonDto(e.getDayOfWeek(), e.getStartTime(), e.getEndTime(), e.getWeekType(), e.getSubgroup(),
+            return new LessonDto(e.getDayOfWeek(), e.getLessonDate(), e.getStartTime(), e.getEndTime(), e.getWeekType(), e.getSubgroup(),
                     e.getSubject(), e.getLessonType(), e.getTeacherText(), e.getRoomText());
         }
     }

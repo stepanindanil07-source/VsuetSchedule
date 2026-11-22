@@ -91,7 +91,8 @@ public class ScheduleImportApplier {
             StudyGroup group = isNew
                     ? groups.save(new StudyGroup(source.getUnitId(), parsedGroup.code(), source.getId()))
                     : existing.get(parsedGroup.code());
-            group.seenIn(source.getId(), parsedGroup.course());
+            // a course stated in the file wins; otherwise the source knows it (zao/5_kurs.xlsx is the 5th course)
+            group.seenIn(source.getId(), parsedGroup.course() != null ? parsedGroup.course() : source.getDefaultCourse());
 
             List<ParsedEntry> groupEntries = entriesByGroup.getOrDefault(parsedGroup.code(), List.of());
             String hash = GroupContentHasher.hash(period.getId(), groupEntries);
@@ -177,6 +178,6 @@ public class ScheduleImportApplier {
     private static ScheduleEntry toEntity(ParsedEntry e, StudyGroup group, AcademicPeriod period, long runId) {
         return new ScheduleEntry(group.getId(), period.getId(), runId, e.dayOfWeek(), e.startTime(), e.endTime(),
                 e.weekType(), e.subgroup(), e.subject(), e.lessonType(), e.teacherText(), e.roomText(), e.rawText(),
-                e.location().container(), e.location().position());
+                e.location().container(), e.location().position(), e.date());
     }
 }

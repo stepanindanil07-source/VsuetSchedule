@@ -32,6 +32,8 @@ import ru.vsuet.schedule.importer.infrastructure.ScheduleSourceRepository;
 import ru.vsuet.schedule.importer.parser.fuits.FuitsExcelParser;
 import ru.vsuet.schedule.importer.parser.fuits.WorkbookFixture;
 import ru.vsuet.schedule.importer.parser.spo.SpoExcelParser;
+import ru.vsuet.schedule.importer.parser.zao.ZaoExcelParser;
+import ru.vsuet.schedule.importer.parser.zao.ZaoFixture;
 import ru.vsuet.schedule.schedule.domain.ScheduleEntry;
 import ru.vsuet.schedule.schedule.infrastructure.ScheduleEntryRepository;
 
@@ -237,6 +239,88 @@ class ImportServiceIntegrationTest {
         assertThat(entries.count()).isEqualTo(1161);
         assertThat(second.status()).isEqualTo(ImportStatus.SKIPPED_UNCHANGED);
         assertThat(entries.count()).isEqualTo(1161);
+    }
+
+    // ---- correspondence schedule: dates, no semester or course in the file ---------------------------------
+
+    private byte[] realZaoFile() throws Exception {
+        try (InputStream in = getClass().getResourceAsStream("/zao/5_kurs.xlsx")) {
+            return in.readAllBytes();
+        }
+    }
+
+    private ScheduleSource zaoSource(boolean pinned) {
+        OrganizationUnit zao = units.save(new OrganizationUnit("zao", "Заочная форма обучения"));
+        ScheduleSource zaoSource = new ScheduleSource(zao.getId(), ZaoExcelParser.KEY, "https://example.test/zao.xlsx");
+        if (pinned) {
+            zaoSource.pinToPeriod(autumn2026.getId());
+        }
+        zaoSource.setDefaultCourse(5);
+        return sources.save(zaoSource);
+    }
+
+    @Test
+    void realCorrespondenceFileImportsDatedLessonsWithTheCourseOfItsSource() throws Exception {
+        ScheduleSource zao = zaoSource(true);
+
+        ImportResult first = importService.importFile(zao.getId(), realZaoFile());
+        ImportResult second = importService.importFile(zao.getId(), realZaoFile());
+
+        assertThat(first.status()).isEqualTo(ImportStatus.SUCCESS);
+        assertThat(first.groupsCreated()).isEqualTo(17);
+        assertThat(first.entriesWritten()).isEqualTo(882);
+        assertThat(second.status()).isEqualTo(ImportStatus.SKIPPED_UNCHANGED);
+        assertThat(entries.count()).isEqualTo(882);
+        assertThat(groups.findAll()).hasSize(17).allSatisfy(g -> {
+            assertThat(g.getCourse()).as("course comes from the source, the file does not state it").isEqualTo(5);
+            assertThat(g.getScheduleVersion()).isEqualTo(1);
+        });
+        assertThat(entries.findAll()).allSatisfy(e -> {
+            assertThat(e.getLessonDate()).isNotNull();
+            assertThat(e.getLessonDate().getDayOfWeek()).isEqualTo(e.getDayOfWeek());
+            assertThat(e.getWeekType()).isEqualTo(WeekType.EVERY_WEEK);
+            assertThat(e.getPeriodId()).isEqualTo(autumn2026.getId());
+        });
+        assertThat(entries.findAll()).extracting(ScheduleEntry::getLessonDate)
+                .contains(LocalDate.of(2026, 10, 12), LocalDate.of(2026, 12, 25));
+        assertThat(entries.findAll()).extracting(e -> e.getLessonType().name()).contains("EXAM", "CREDIT");
+    }
+
+    @Test
+    void sameLessonOnAnotherDateIsADifferentLessonForTheScheduleVersion() {
+        ScheduleSource zao = zaoSource(true);
+        byte[] monday = zaoFileWithOneLessonOn("ПНД \n12/10");
+        byte[] nextMonday = zaoFileWithOneLessonOn("ПНД \n19/10");
+
+        importService.importFile(zao.getId(), monday);
+        ImportResult result = importService.importFile(zao.getId(), nextMonday);
+
+        assertThat(result.status()).isEqualTo(ImportStatus.SUCCESS);
+        assertThat(result.groupsUpdated()).isEqualTo(1);
+        assertThat(groups.findAll()).singleElement().satisfies(g -> assertThat(g.getScheduleVersion()).isEqualTo(2));
+        assertThat(entries.findAll()).singleElement()
+                .satisfies(e -> assertThat(e.getLessonDate()).isEqualTo(LocalDate.of(2026, 10, 19)));
+    }
+
+    private static byte[] zaoFileWithOneLessonOn(String day) {
+        try (InputStream in = ZaoFixture.withGroups("ЗАП-22").day(day, "08.00-09.35")
+                .lesson(day, 0, 0, "пр. Физика", "Иванов И.И.", "12").stream()) {
+            return in.readAllBytes();
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
+    }
+
+    @Test
+    void correspondenceSourceThatIsNotPinnedFailsBeforeWritingAnything() throws Exception {
+        ScheduleSource zao = zaoSource(false);
+
+        ImportResult result = importService.importFile(zao.getId(), realZaoFile());
+
+        assertThat(result.status()).isEqualTo(ImportStatus.FAILED);
+        assertThat(runs.findById(result.runId()).orElseThrow().getErrorMessage()).contains("pin the source");
+        assertThat(entries.count()).isZero();
+        assertThat(groups.count()).isZero();
     }
 
     // ---- failures must not damage existing data ---------------------------------------------------------

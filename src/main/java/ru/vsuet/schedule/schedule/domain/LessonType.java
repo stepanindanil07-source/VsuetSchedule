@@ -5,5 +5,9 @@ public enum LessonType {
     LECTURE,
     PRACTICE,
     LAB,
+    /** Written exam ("экз.") of the correspondence schedule. */
+    EXAM,
+    /** Credit ("зач.") of the correspondence schedule. */
+    CREDIT,
     OTHER
 }

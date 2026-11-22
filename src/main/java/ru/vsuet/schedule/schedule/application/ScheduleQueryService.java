@@ -19,12 +19,13 @@ import ru.vsuet.schedule.schedule.infrastructure.ScheduleEntryRepository;
 public class ScheduleQueryService {
 
     /**
-     * Day, start time, then numerator before denominator before every-week (the enum's own order: sorting by the
+     * Weekly lessons first, then dated ones by date; within that day, start time, then numerator before denominator before every-week (the enum's own order: sorting by the
      * stored text would put DENOMINATOR first), then whole-group before subgroups. A group has dozens of lessons,
      * so sorting in memory is simpler than encoding this order in SQL.
      */
     private static final Comparator<ScheduleEntry> DISPLAY_ORDER = Comparator
-            .comparing(ScheduleEntry::getDayOfWeek)
+            .comparing(ScheduleEntry::getLessonDate, Comparator.nullsFirst(Comparator.naturalOrder()))
+            .thenComparing(ScheduleEntry::getDayOfWeek)
             .thenComparing(ScheduleEntry::getStartTime)
             .thenComparing(ScheduleEntry::getWeekType)
             .thenComparing(ScheduleEntry::getSubgroup, Comparator.nullsFirst(Comparator.naturalOrder()))

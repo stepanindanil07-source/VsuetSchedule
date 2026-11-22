@@ -16,7 +16,7 @@ docker compose up -d postgres          # PostgreSQL 17 on localhost:5433
 
 - API: <http://localhost:8080/api/v1/faculties> · Swagger UI: <http://localhost:8080/swagger-ui.html> ·
   OpenAPI: <http://localhost:8080/v3/api-docs>
-- Flyway creates the schema and seeds the 6 faculties (5 grid `.xlsx` + SPO `.xls`), their file URLs and the autumn 2026–2027 semester.
+- Flyway creates the schema and seeds the 7 faculties (5 grid `.xlsx`, SPO `.xls`, correspondence `.xlsx`), their file URLs and the autumn 2026–2027 semester.
 - Sources are imported every hour. Change it with `VSUET_IMPORT_CRON` (e.g. `"0/30 * * * * *"` = every 30 s) or
   switch it off with `VSUET_IMPORT_SCHEDULER_ENABLED=false`.
 - Database settings: `DB_URL`, `DB_USER`, `DB_PASSWORD`.
@@ -55,9 +55,16 @@ study_group (version per group) · schedule_entry · import_run (history)
   period (`schedule_source.academic_period_id`) when the semester text inside its file is wrong (eiu.xlsx is).
 - **Parsers:** `vsuet-grid-xlsx` (uits, itf, eht, tf, eiu) and `spo-xls` (fspo/1_kurs.xls, fspo/2-3-4_kurs.xls) share
   one grid engine (`importer/parser/grid`: header, groups, days, slots, merged-cell geometry) and differ only in the
-  cell-text notation, time notation and a few policies (`GridFormat`). A new layout (correspondence courses) = a new
-  `ScheduleParser` with its own key; nothing else changes.
-- **Semester not stated in a file** (2-3-4_kurs.xls): the source must be pinned to a period, otherwise the import is
+  cell-text notation, time notation and a few policies (`GridFormat`). A new layout = a new `ScheduleParser` with its
+  own key; nothing else changes.
+- **Correspondence (заочное) schedule** (`zao-xlsx`, zao/5_kurs.xlsx) is a different layout and has its own parser:
+  lessons are listed per **calendar date** ("ПНД 12/10"), not per weekday and week parity, so a lesson may carry a
+  `date` (API: `lessons[].date`, `weekType` is `EVERY_WEEK`; null for the usual weekly lessons) and can be an
+  `EXAM`/`CREDIT`. The file has no year, semester or course: the source must be pinned to a period (the year is the
+  first one that puts the date on or after the period start, and the weekday written next to the date is checked
+  against it), and `schedule_source.default_course` gives the groups their course. Two teachers/rooms or two parallel
+  subjects of one cell stay one lesson showing both.
+- **Semester not stated in a file** (2-3-4_kurs.xls, zao/5_kurs.xlsx): the source must be pinned to a period, otherwise the import is
   rejected before anything is written.
 - **Course of a group** is read from the sheet, never from the group code: a merged band above the groups
   ("2 КУРС" in 2-3-4_kurs.xls) wins; otherwise the sheet name and title, if they name exactly one course ("1 курс",

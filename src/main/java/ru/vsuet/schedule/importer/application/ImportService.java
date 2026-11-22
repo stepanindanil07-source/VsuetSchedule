@@ -6,12 +6,15 @@ import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import ru.vsuet.schedule.academic.domain.AcademicPeriod;
+import ru.vsuet.schedule.academic.infrastructure.AcademicPeriodRepository;
 import ru.vsuet.schedule.common.Hashes;
 import ru.vsuet.schedule.importer.domain.ImportRun;
 import ru.vsuet.schedule.importer.domain.ScheduleSource;
 import ru.vsuet.schedule.importer.infrastructure.ImportRunRepository;
 import ru.vsuet.schedule.importer.infrastructure.ScheduleSourceRepository;
 import ru.vsuet.schedule.importer.parser.ParseDiagnostics;
+import ru.vsuet.schedule.importer.parser.ParseContext;
 import ru.vsuet.schedule.importer.parser.ParseIssue;
 import ru.vsuet.schedule.importer.parser.ParsedSchedule;
 import ru.vsuet.schedule.importer.parser.ParserRegistry;
@@ -31,14 +34,16 @@ public class ImportService {
     private static final Logger log = LoggerFactory.getLogger(ImportService.class);
 
     private final ScheduleSourceRepository sources;
+    private final AcademicPeriodRepository periods;
     private final ImportRunRepository runs;
     private final ParserRegistry parsers;
     private final ScheduleImportApplier applier;
     private final Clock clock;
 
-    ImportService(ScheduleSourceRepository sources, ImportRunRepository runs, ParserRegistry parsers,
-                  ScheduleImportApplier applier, Clock clock) {
+    ImportService(ScheduleSourceRepository sources, AcademicPeriodRepository periods, ImportRunRepository runs,
+                  ParserRegistry parsers, ScheduleImportApplier applier, Clock clock) {
         this.sources = sources;
+        this.periods = periods;
         this.runs = runs;
         this.parsers = parsers;
         this.applier = applier;
@@ -59,7 +64,8 @@ public class ImportService {
                 runs.save(run);
                 return ImportResult.unchanged(run.getId());
             }
-            ParsedSchedule parsed = parsers.get(source.getParserKey()).parse(new ByteArrayInputStream(content));
+            ParsedSchedule parsed = parsers.get(source.getParserKey())
+                    .parse(new ByteArrayInputStream(content), contextOf(source));
             return applier.apply(run.getId(), sourceId, parsed, sha256);
         } catch (ScheduleParseException e) {
             return fail(run, e.getMessage(), e.diagnostics(), List.of(), e);
@@ -68,6 +74,15 @@ public class ImportService {
         } catch (RuntimeException e) {
             return fail(run, "Unexpected error: " + e.getMessage(), null, List.of(), e);
         }
+    }
+
+    /** The pinned period's first day, if the source is pinned (read-only lookup, no transaction needed). */
+    private ParseContext contextOf(ScheduleSource source) {
+        if (source.getAcademicPeriodId() == null) {
+            return ParseContext.unknown();
+        }
+        return periods.findById(source.getAcademicPeriodId())
+                .map(AcademicPeriod::getStartDate).map(ParseContext::new).orElse(ParseContext.unknown());
     }
 
     /** Records that the file could not even be downloaded; the current schedule is untouched. */

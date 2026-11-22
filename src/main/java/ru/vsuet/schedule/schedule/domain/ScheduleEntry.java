@@ -10,6 +10,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.DayOfWeek;
+import java.time.LocalDate;
 import java.time.LocalTime;
 import ru.vsuet.schedule.common.WeekType;
 
@@ -72,6 +73,10 @@ public class ScheduleEntry {
     @Column(name = "source_range")
     private String sourceRange;
 
+    /** Calendar date of a one-off lesson (correspondence schedule); {@code null} = a weekly lesson. */
+    @Column(name = "lesson_date")
+    private LocalDate lessonDate;
+
     protected ScheduleEntry() {
     }
 
@@ -79,6 +84,16 @@ public class ScheduleEntry {
     public ScheduleEntry(Long groupId, Long periodId, Long importRunId, DayOfWeek dayOfWeek, LocalTime startTime,
                          LocalTime endTime, WeekType weekType, Integer subgroup, String subject, LessonType lessonType,
                          String teacherText, String roomText, String rawText, String sourceSheet, String sourceRange) {
+        this(groupId, periodId, importRunId, dayOfWeek, startTime, endTime, weekType, subgroup, subject, lessonType,
+                teacherText, roomText, rawText, sourceSheet, sourceRange, null);
+    }
+
+    @SuppressWarnings("java:S107")
+    public ScheduleEntry(Long groupId, Long periodId, Long importRunId, DayOfWeek dayOfWeek, LocalTime startTime,
+                         LocalTime endTime, WeekType weekType, Integer subgroup, String subject, LessonType lessonType,
+                         String teacherText, String roomText, String rawText, String sourceSheet, String sourceRange,
+                         LocalDate lessonDate) {
+        this.lessonDate = lessonDate;
         this.groupId = groupId;
         this.periodId = periodId;
         this.importRunId = importRunId;
@@ -158,5 +173,9 @@ public class ScheduleEntry {
 
     public String getSourceRange() {
         return sourceRange;
+    }
+
+    public LocalDate getLessonDate() {
+        return lessonDate;
     }
 }
