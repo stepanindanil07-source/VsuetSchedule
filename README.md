@@ -28,7 +28,7 @@ Tests (need Docker for Testcontainers): `./mvnw verify`.
 | Endpoint | Purpose |
 |---|---|
 | `GET /faculties` | faculties |
-| `GET /faculties/{id}/groups` | groups present in the current schedule |
+| `GET /faculties/{id}/groups` | groups present in the current schedule, with `course` (null when the file does not say) |
 | `GET /groups/{id}/schedule?weekType=&subgroup=` | schedule of the current semester |
 | `GET /groups/{id}/schedule/version` | version of the group's schedule (ETag, 304) |
 
@@ -59,8 +59,12 @@ study_group (version per group) · schedule_entry · import_run (history)
   `ScheduleParser` with its own key; nothing else changes.
 - **Semester not stated in a file** (2-3-4_kurs.xls): the source must be pinned to a period, otherwise the import is
   rejected before anything is written.
+- **Course of a group** is read from the sheet, never from the group code: a merged band above the groups
+  ("2 КУРС" in 2-3-4_kurs.xls) wins; otherwise the sheet name and title, if they name exactly one course ("1 курс",
+  "учебных занятий 1 курса"). Sheets that mix courses ("1, 2 и 5 курсов", masters) and SPO groups under no band
+  get `course = null` and a `GROUP_COURSE_UNKNOWN` warning.
 - Module layout: `academic` (faculties, groups, periods), `schedule` (lessons, read API), `importer`
   (sources, parsers, import), `common`.
 
-See `src/main/java/.../importer/parser/fuits/FuitsSheetParser.java` for how the sheet geometry (merged cells) is
+See `src/main/java/.../importer/parser/grid/GridSheetParser.java` for how the sheet geometry (merged cells) is
 turned into week type and subgroup.

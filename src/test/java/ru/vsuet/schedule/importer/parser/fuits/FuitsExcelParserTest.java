@@ -356,6 +356,44 @@ class FuitsExcelParserTest {
         assertThat(s.diagnostics().issues()).extracting(ParseIssue::code).containsExactly("EMPTY_SHEET_IGNORED");
     }
 
+    // ---- course of a group -------------------------------------------------------------------------------
+
+    @Test
+    void courseOfEveryGroupComesFromTheSheetNameAndTitle() {
+        WorkbookFixture f = WorkbookFixture.xlsx()
+                .sheet("3 курс", SEMESTER, "Г-1", 2, "Г-2", 1).put("A1", "учебных занятий  3 курса  факультета")
+                .day("ВТОРНИК").slot("08.00-09.35", 2).put("C3", LESSON);
+
+        ParsedSchedule s = parse(f);
+
+        assertThat(s.groups()).extracting(g -> g.code() + ":" + g.course()).containsExactly("Г-1:3", "Г-2:3");
+        assertThat(s.diagnostics().issues()).isEmpty();
+    }
+
+    @Test
+    void sheetThatNamesSeveralCoursesLeavesTheCourseEmptyWithAWarning() {
+        WorkbookFixture f = WorkbookFixture.xlsx()
+                .sheet("5 курс + магистры", SEMESTER, "Ум-1", 1, "УБ-1", 1).put("A1", "учебных занятий  1, 2 и 5 курсов")
+                .day("ВТОРНИК").slot("08.00-09.35", 2).put("C3", LESSON);
+
+        ParsedSchedule s = parse(f);
+
+        assertThat(s.groups()).extracting(g -> g.course()).containsExactly(null, null);
+        assertThat(s.diagnostics().issues()).singleElement().satisfies(i -> {
+            assertThat(i.code()).isEqualTo("GROUP_COURSE_UNKNOWN");
+            assertThat(i.message()).contains("Ум-1", "УБ-1");
+        });
+    }
+
+    @Test
+    void sheetThatNamesNoCourseLeavesItEmpty() {
+        WorkbookFixture f = WorkbookFixture.xlsx()
+                .sheet("Магистры", SEMESTER, "Тм-1", 1)
+                .day("ВТОРНИК").slot("08.00-09.35", 2).put("C3", LESSON);
+
+        assertThat(parse(f).groups()).singleElement().satisfies(g -> assertThat(g.course()).isNull());
+    }
+
     @Test
     void readsTheLegacyXlsFormatThroughTheSameCode() {
         WorkbookFixture f = WorkbookFixture.xls()

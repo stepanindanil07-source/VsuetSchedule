@@ -7,6 +7,8 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 /**
  * A study group. Matched by (unit, code) and never deleted by an import, so ids stay stable for clients.
@@ -39,6 +41,10 @@ public class StudyGroup {
     @Column(name = "source_id")
     private Long sourceId;
 
+    /** Year of study (1-6) as the last imported file states it; {@code null} when the file does not say. */
+    @JdbcTypeCode(SqlTypes.SMALLINT)
+    private Integer course;
+
     protected StudyGroup() {
     }
 
@@ -49,9 +55,13 @@ public class StudyGroup {
         this.active = true;
     }
 
-    /** The group is present in the file of the given source: it is shown and now belongs to that source. */
-    public void seenIn(Long sourceId) {
+    /**
+     * The group is present in the file of the given source: it is shown, now belongs to that source and takes the
+     * course that file states (the file is the authority, so an unknown course there clears an old value).
+     */
+    public void seenIn(Long sourceId, Integer course) {
         this.sourceId = sourceId;
+        this.course = course;
         this.active = true;
     }
 
@@ -96,5 +106,9 @@ public class StudyGroup {
 
     public Long getSourceId() {
         return sourceId;
+    }
+
+    public Integer getCourse() {
+        return course;
     }
 }

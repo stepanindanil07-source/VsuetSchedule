@@ -87,6 +87,7 @@ class ScheduleApiIntegrationTest {
         ImportRun run = runs.save(ImportRun.start(source.getId(), null, Instant.parse("2026-09-01T00:00:00Z")));
 
         group = groups.save(new StudyGroup(uits.getId(), "У-251", source.getId()));
+        group.seenIn(source.getId(), 2);
         group.contentChanged("h1", Instant.parse("2026-09-01T00:00:00Z"));
         group.contentChanged("h2", Instant.parse("2026-09-02T00:00:00Z"));
         group.contentChanged("h3", Instant.parse("2026-09-03T08:30:00Z"));
@@ -134,6 +135,7 @@ class ScheduleApiIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(1)))
                 .andExpect(jsonPath("$[0].code").value("У-251"))
+                .andExpect(jsonPath("$[0].course").value(2))
                 .andExpect(jsonPath("$[0].scheduleVersion").value(3))
                 .andExpect(jsonPath("$[0].scheduleUpdatedAt").value("2026-09-03T08:30:00Z"));
     }

@@ -126,6 +126,41 @@ class SpoExcelParserRealFilesTest {
     }
 
     @Test
+    void firstYearGroupsTakeTheCourseFromTheTitleOverTheWholeSheet() {
+        // B18:AZ18 "РАСПИСАНИЕ УЧЕБНЫХ ЗАНЯТИЙ 1 КУРСА ФСПО ..."
+        assertThat(firstYear.groups()).extracting(ParsedGroup::course).containsOnly(1);
+        assertThat(firstYear.diagnostics().issues()).extracting(ParseIssue::code).doesNotContain("GROUP_COURSE_UNKNOWN");
+    }
+
+    @Test
+    void secondToFourthYearGroupsTakeTheCourseFromTheMergedBandAboveThem() {
+        // row 29: S29:BF31 "2 КУРС", BG29:CZ31 "3 КУРС", DA29:DZ31 "4 КУРС"
+        assertThat(course("ТХС-251")).isEqualTo(2);
+        assertThat(course("ТХ-254")).isEqualTo(2);   // last group under the 2nd-course band
+        assertThat(course("ТХС-241")).isEqualTo(3);   // first group under the 3rd-course band
+        assertThat(course("ПКД-249")).isEqualTo(3);
+        assertThat(course("ТХС-231")).isEqualTo(4);
+        assertThat(course("ПКД-239")).isEqualTo(4);   // DY:EB sticks out of the band DA:DZ; its first column is inside
+        assertThat(secondToFourthYear.groups()).filteredOn(g -> g.course() != null).hasSize(56);
+    }
+
+    @Test
+    void groupsLeftOfTheCourseBandsHaveNoCourseAndAreReported() {
+        // D..R: "10 МЕСЯЦЕВ" over ЛКК-2111 and groups with no band above them; their course is not guessed
+        assertThat(secondToFourthYear.groups()).filteredOn(g -> g.course() == null).extracting(ParsedGroup::code)
+                .containsExactly("ЛКК-2111", "ПКД-218", "ПКД-219", "ИСП-215", "ИСП-216", "ИСП-216 б", "КС-213", "К-212");
+        assertThat(secondToFourthYear.diagnostics().issues()).filteredOn(i -> i.code().equals("GROUP_COURSE_UNKNOWN"))
+                .singleElement().satisfies(i -> {
+                    assertThat(i.severity()).isEqualTo(IssueSeverity.WARNING);
+                    assertThat(i.message()).contains("ЛКК-2111", "К-212");
+                });
+    }
+
+    private static Integer course(String group) {
+        return secondToFourthYear.groups().stream().filter(g -> g.code().equals(group)).findFirst().orElseThrow().course();
+    }
+
+    @Test
     void secondToFourthYearFileEveryLessonCellIsAccountedFor() {
         // 943 lesson cells were counted independently; two lessons cannot be placed and are reported as errors
         assertThat(secondToFourthYear.diagnostics().skipped()).isEqualTo(2);

@@ -57,6 +57,29 @@ class SpoExcelParserTest {
     }
 
     @Test
+    void courseComesFromTheMergedBandAboveTheGroupsAndGroupsUnderNoBandAreReported() {
+        // like 2-3-4_kurs.xls: no title, bands "2 КУРС" / "3 КУРС" in row 1 above the label rows
+        WorkbookFixture f = WorkbookFixture.xlsx().sheetSpo("Лист3", null, "Л-1", 2, "А-2", 2, "Б-2", 2, "В-3", 2)
+                .put("E1", "2 КУРС").merge("E1:H1")
+                .put("I1", "3 КУРС").merge("I1:J1")
+                .day("ПОНЕДЕЛЬНИК").slot("8.00-9.35", 2).put("C5", CHEMISTRY);
+
+        ParsedSchedule s = parse(f);
+
+        assertThat(s.groups()).extracting(g -> g.code() + ":" + g.course())
+                .containsExactly("Л-1:null", "А-2:2", "Б-2:2", "В-3:3");
+        assertThat(s.diagnostics().issues()).filteredOn(i -> i.code().equals("GROUP_COURSE_UNKNOWN"))
+                .singleElement().satisfies(i -> assertThat(i.message()).contains("Л-1").doesNotContain("А-2"));
+    }
+
+    @Test
+    void courseInTheTitleAppliesToEveryGroupOfTheSheet() {
+        ParsedSchedule s = parse(standard(SEMESTER).put("C5", CHEMISTRY));   // "... 1  КУРСА   ФСПО ..." in B1
+
+        assertThat(s.groups()).extracting(g -> g.course()).containsExactly(1, 1);
+    }
+
+    @Test
     void readsTheSemesterFromTheTitleLine() {
         ParsedSchedule s = parse(standard(SEMESTER).put("C5", CHEMISTRY));
 

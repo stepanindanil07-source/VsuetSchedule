@@ -118,6 +118,7 @@ class ImportServiceIntegrationTest {
             assertThat(g.getScheduleVersion()).isEqualTo(1);
             assertThat(g.isActive()).isTrue();
             assertThat(g.getScheduleUpdatedAt()).isNotNull();
+            assertThat(g.getCourse()).as("course from sheet '1 курс'").isEqualTo(1);
         });
         assertThat(entries.count()).isEqualTo(4);
         ScheduleEntry first = entries.findByGroupIdAndPeriodId(groupsByCode().get("Г-1").getId(), autumn2026.getId())
@@ -200,6 +201,23 @@ class ImportServiceIntegrationTest {
         assertThat(result.groupsDeactivated()).isZero();
         assertThat(groupsByCode()).containsOnlyKeys("Г-1", "Г-2", "Г-3");
         assertThat(groupsByCode().values()).allSatisfy(g -> assertThat(g.isActive()).isTrue());
+    }
+
+    @Test
+    void courseChangeAloneUpdatesTheGroupButNotItsScheduleVersion() {
+        importService.importFile(source.getId(), fileA());
+        byte[] sameLessonsOnSecondCourseSheet = bytes(WorkbookFixture.xlsx().sheet("2 курс", AUTUMN_2026, "Г-1", 1, "Г-2", 1)
+                .day("ПОНЕДЕЛЬНИК").slot("08.00-09.35", 2).slot("09.45-11.20", 2)
+                .put("C3", PHYSICS).put("C5", CHEMISTRY).put("D3", CHEMISTRY).put("D5", PHYSICS));
+
+        ImportResult result = importService.importFile(source.getId(), sameLessonsOnSecondCourseSheet);
+
+        assertThat(result.status()).isEqualTo(ImportStatus.SUCCESS);
+        assertThat(result.entriesWritten()).isZero();
+        assertThat(groupsByCode().values()).allSatisfy(g -> {
+            assertThat(g.getCourse()).isEqualTo(2);
+            assertThat(g.getScheduleVersion()).as("lessons did not change").isEqualTo(1);
+        });
     }
 
     @Test

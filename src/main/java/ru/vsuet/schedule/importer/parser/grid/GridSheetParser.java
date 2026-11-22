@@ -6,6 +6,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.apache.poi.ss.usermodel.Cell;
@@ -56,6 +58,10 @@ final class GridSheetParser {
     /** A bare start time, optionally numbered: "1) 8 00". */
     private static final Pattern TIME_START = Pattern.compile("^\\s*(?:\\d+\\)\\s*)?(\\d{1,2})[.: ](\\d{2})\\s*$");
     private static final Pattern SUBGROUP_IN_TEXT = Pattern.compile("(\\d+)\\s*п/г");
+    /** "2 КУРС", "1  курса", "1, 2 и 5 курсов"; group 1 is the list of numbers. A number glued to a word is not one. */
+    private static final Pattern COURSE = Pattern.compile(
+            "(?iu)(?<![\\d\\p{L}])((?:[1-6]\\s*(?:,|и)\\s*)*[1-6])(?:\\s*-?\\s*(?:й|го|ого))?\\s*курс");
+    private static final Pattern COURSE_DIGIT = Pattern.compile("[1-6]");
 
     /** Group columns: {@code firstCol..lastCol} inclusive, zero-based. */
     private record GroupColumns(String code, int firstCol, int lastCol) {
@@ -147,7 +153,88 @@ final class GridSheetParser {
                     + "set to start + " + LESSON_MINUTES + " minutes (the length of every explicit interval in the files)",
                     firstDerivedEnd, null);
         }
-        return new SheetResult(groups.stream().map(g -> new ParsedGroup(g.code())).toList(), entries);
+        return new SheetResult(resolveCourses(header, groups), entries);
+    }
+
+    // ---- courses -----------------------------------------------------------------------------------------
+
+    /** A text above the group row that names one or more courses ("2 КУРС", "1, 2 и 5 курсов"), with its columns. */
+    private record CourseMention(Set<Integer> courses, int firstCol, int lastCol) {
+        boolean namesOneCourseAt(int col) {
+            return courses.size() == 1 && col >= firstCol && col <= lastCol;
+        }
+    }
+
+    /**
+     * The course of each group, as the sheet states it:
+     * <ol>
+     *   <li>a text above the group row that names exactly one course and lies over the group's first column (the SPO
+     *       file for courses 2-4 has merged bands "2 КУРС" / "3 КУРС" / "4 КУРС" over its groups);</li>
+     *   <li>otherwise the sheet as a whole, if its name and the texts above the group row name exactly one course
+     *       between them (FUITS: sheet "1 курс", title "учебных занятий 1 курса");</li>
+     *   <li>otherwise unknown: a sheet "1, 2 и 5 курсов" mixes courses, and groups under no band are not guessed.</li>
+     * </ol>
+     * Group codes are not used: their digits are not a reliable year (SPO "ИСП-215" sits next to the 2nd course).
+     */
+    private List<ParsedGroup> resolveCourses(Header header, List<GroupColumns> groups) {
+        List<CourseMention> mentions = courseMentionsAbove(header.groupRow());
+        Set<Integer> sheetCourses = new TreeSet<>(coursesIn(sheet.getSheetName()));
+        mentions.forEach(m -> sheetCourses.addAll(m.courses()));
+        Integer sheetCourse = sheetCourses.size() == 1 ? sheetCourses.iterator().next() : null;
+
+        List<ParsedGroup> result = new ArrayList<>();
+        List<String> unknown = new ArrayList<>();
+        for (GroupColumns group : groups) {
+            Set<Integer> fromBands = new TreeSet<>();
+            mentions.stream().filter(m -> m.namesOneCourseAt(group.firstCol())).forEach(m -> fromBands.addAll(m.courses()));
+            Integer course = fromBands.size() == 1 ? fromBands.iterator().next() : fromBands.isEmpty() ? sheetCourse : null;
+            if (course == null) {
+                unknown.add(group.code());
+            }
+            result.add(new ParsedGroup(group.code(), course));
+        }
+        if (!unknown.isEmpty()) {
+            diagnostics.warn("GROUP_COURSE_UNKNOWN", "The sheet does not state the course of group(s) " + String.join(", ", unknown)
+                    + " unambiguously; their course is left empty", location(header.groupRow(), header.timeCol()), null);
+        }
+        return result;
+    }
+
+    private List<CourseMention> courseMentionsAbove(int groupRow) {
+        List<CourseMention> mentions = new ArrayList<>();
+        for (int r = sheet.getFirstRowNum(); r < groupRow; r++) {
+            Row row = sheet.getRow(r);
+            if (row == null) {
+                continue;
+            }
+            for (Cell cell : row) {
+                Set<Integer> courses = coursesIn(formatter.formatCellValue(cell));
+                if (courses.isEmpty()) {
+                    continue;
+                }
+                CellRangeAddress range = merged.at(r, cell.getColumnIndex());
+                if (range != null && !MergedRegions.isAnchor(range, r, cell.getColumnIndex())) {
+                    continue;
+                }
+                int first = range != null ? range.getFirstColumn() : cell.getColumnIndex();
+                int last = range != null ? range.getLastColumn() : cell.getColumnIndex();
+                mentions.add(new CourseMention(courses, first, last));
+            }
+        }
+        return mentions;
+    }
+
+    /** Course numbers named in a text: "2 КУРС" -> {2}, "1, 2 и 5 курсов" -> {1, 2, 5}, "Расписание" -> {}. */
+    static Set<Integer> coursesIn(String text) {
+        Set<Integer> courses = new TreeSet<>();
+        Matcher m = COURSE.matcher(text);
+        while (m.find()) {
+            Matcher digit = COURSE_DIGIT.matcher(m.group(1));
+            while (digit.find()) {
+                courses.add(Integer.parseInt(digit.group()));
+            }
+        }
+        return courses;
     }
 
     // ---- structure ---------------------------------------------------------------------------------------

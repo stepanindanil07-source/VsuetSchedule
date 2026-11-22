@@ -22,12 +22,16 @@ final class CatalogDtos {
     record GroupDto(
             long id,
             String code,
+            @Schema(description = "Year of study (1-6) as the schedule file states it; null when the file does not say "
+                    + "(e.g. a sheet that mixes masters and 5th-year groups)", nullable = true, minimum = "1", maximum = "6")
+            Integer course,
             @Schema(description = "Increases whenever this group's lessons change; compare with the stored one to detect updates")
             long scheduleVersion,
             @Schema(description = "When the lessons last changed; null if the group has no schedule yet", nullable = true)
             Instant scheduleUpdatedAt) {
         static GroupDto of(StudyGroup group) {
-            return new GroupDto(group.getId(), group.getCode(), group.getScheduleVersion(), group.getScheduleUpdatedAt());
+            return new GroupDto(group.getId(), group.getCode(), group.getCourse(), group.getScheduleVersion(),
+                    group.getScheduleUpdatedAt());
         }
     }
 }

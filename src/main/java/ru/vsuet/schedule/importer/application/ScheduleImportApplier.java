@@ -91,7 +91,7 @@ public class ScheduleImportApplier {
             StudyGroup group = isNew
                     ? groups.save(new StudyGroup(source.getUnitId(), parsedGroup.code(), source.getId()))
                     : existing.get(parsedGroup.code());
-            group.seenIn(source.getId());
+            group.seenIn(source.getId(), parsedGroup.course());
 
             List<ParsedEntry> groupEntries = entriesByGroup.getOrDefault(parsedGroup.code(), List.of());
             String hash = GroupContentHasher.hash(period.getId(), groupEntries);
