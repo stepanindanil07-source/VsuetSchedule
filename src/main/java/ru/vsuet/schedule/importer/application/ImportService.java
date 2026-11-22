@@ -6,7 +6,6 @@ import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import ru.vsuet.schedule.academic.domain.AcademicPeriod;
 import ru.vsuet.schedule.academic.infrastructure.AcademicPeriodRepository;
 import ru.vsuet.schedule.common.Hashes;
 import ru.vsuet.schedule.importer.domain.ImportRun;
@@ -95,7 +94,7 @@ public class ImportService {
             return ParseContext.unknown();
         }
         return periods.findById(source.getAcademicPeriodId())
-                .map(AcademicPeriod::getStartDate).map(ParseContext::new).orElse(ParseContext.unknown());
+                .map(p -> new ParseContext(p.getStartDate(), p.getYearFrom())).orElse(ParseContext.unknown());
     }
 
     /** Records that the file could not even be downloaded; the current schedule is untouched. */

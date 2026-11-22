@@ -4,9 +4,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -19,6 +21,7 @@ import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.ss.usermodel.WorkbookFactory;
 import ru.vsuet.schedule.academic.domain.AcademicTerm;
 import ru.vsuet.schedule.importer.parser.DiagnosticsCollector;
+import ru.vsuet.schedule.importer.parser.ParseContext;
 import ru.vsuet.schedule.importer.parser.ParsedEntry;
 import ru.vsuet.schedule.importer.parser.ParsedGroup;
 import ru.vsuet.schedule.importer.parser.ParsedPeriod;
@@ -67,9 +70,15 @@ public abstract class GridWorkbookParser implements ScheduleParser {
 
     @Override
     public ParsedSchedule parse(InputStream file) {
+        return parse(file, ParseContext.unknown());
+    }
+
+    /** The context only matters for courses: see {@link GroupCodeYear}. */
+    @Override
+    public ParsedSchedule parse(InputStream file, ParseContext context) {
         DiagnosticsCollector diagnostics = new DiagnosticsCollector();
         try (Workbook workbook = open(file, diagnostics)) {
-            return parseWorkbook(workbook, diagnostics);
+            return parseWorkbook(workbook, context, diagnostics);
         } catch (IOException e) {
             throw fail("Cannot close workbook: " + e.getMessage(), diagnostics, e);
         }
@@ -83,13 +92,15 @@ public abstract class GridWorkbookParser implements ScheduleParser {
         }
     }
 
-    private ParsedSchedule parseWorkbook(Workbook workbook, DiagnosticsCollector diagnostics) {
+    private ParsedSchedule parseWorkbook(Workbook workbook, ParseContext context, DiagnosticsCollector diagnostics) {
         List<ParsedGroup> groups = new ArrayList<>();
         List<ParsedEntry> entries = new ArrayList<>();
         Set<ParsedPeriod> periods = new LinkedHashSet<>();
         Set<String> groupCodes = new HashSet<>();
-        int parsedSheets = 0;
 
+        // First find the schedule sheets and the semester: a sheet's groups may need the academic year (courses)
+        // although the sheet itself does not state the semester (a masters sheet often does not).
+        Map<Sheet, Integer> scheduleSheets = new LinkedHashMap<>();
         for (Sheet sheet : workbook) {
             int headerRow = GridSheetParser.findHeaderRow(sheet);
             if (headerRow < 0) {
@@ -101,8 +112,15 @@ public abstract class GridWorkbookParser implements ScheduleParser {
                 throw fail("Sheet '" + sheet.getSheetName() + "' has no 'Дни' header: unknown layout", diagnostics, null);
             }
             findPeriod(sheet, headerRow, diagnostics).ifPresent(periods::add);
+            scheduleSheets.put(sheet, headerRow);
+        }
+        Integer academicYear = context.academicYearFrom() != null ? context.academicYearFrom()
+                : periods.size() == 1 ? periods.iterator().next().yearFrom() : null;
 
-            GridSheetParser.SheetResult result = new GridSheetParser(format, diagnostics).parse(sheet, headerRow);
+        for (Map.Entry<Sheet, Integer> scheduleSheet : scheduleSheets.entrySet()) {
+            Sheet sheet = scheduleSheet.getKey();
+            GridSheetParser.SheetResult result = new GridSheetParser(format, diagnostics, academicYear)
+                    .parse(sheet, scheduleSheet.getValue());
             if (result == null) {
                 throw fail("Sheet '" + sheet.getSheetName() + "' has an unexpected header structure", diagnostics, null);
             }
@@ -114,8 +132,8 @@ public abstract class GridWorkbookParser implements ScheduleParser {
             }
             groups.addAll(result.groups());
             entries.addAll(result.entries());
-            parsedSheets++;
         }
+        int parsedSheets = scheduleSheets.size();
 
         if (parsedSheets == 0) {
             throw fail("The workbook contains no schedule sheets", diagnostics, null);

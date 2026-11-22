@@ -16,8 +16,8 @@ import ru.vsuet.schedule.importer.parser.grid.LessonTextParser;
 public class FuitsExcelParser extends GridWorkbookParser {
 
     public static final String KEY = "vsuet-grid-xlsx";
-    /** 2: the course of each group is read from the sheet. */
-    static final String VERSION = "2";
+    /** 2: the course of each group is read from the sheet; 3: on sheets that mix courses, from the code of the group. */
+    static final String VERSION = "3";
 
     public FuitsExcelParser() {
         super(KEY, VERSION, new FuitsFormat(), true);

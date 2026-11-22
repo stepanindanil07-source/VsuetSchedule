@@ -68,24 +68,27 @@ class FuitsExcelParserRealFileTest {
     }
 
     @Test
-    void theOnlyWarningIsTheUnknownCourseOfTheMixedMastersSheet() {
+    void theOnlyWarningSaysThatTheCoursesOfTheMixedSheetWereTakenFromTheGroupCodes() {
         assertThat(schedule.diagnostics().issues()).singleElement().satisfies(issue -> {
-            assertThat(issue.code()).isEqualTo("GROUP_COURSE_UNKNOWN");
+            assertThat(issue.code()).isEqualTo("COURSE_FROM_GROUP_CODE");
             assertThat(issue.location().container()).isEqualTo("5 курс + магистры");
+            assertThat(issue.message()).contains("[1, 2, 5]").contains("2025-2026");
         });
     }
 
     @Test
-    void courseComesFromTheSheetNameAndTitleAndStaysEmptyOnTheSheetThatMixesCourses() {
-        // sheets "1 курс" .. "4 курс" with titles "учебных занятий N курса"; the last one says "1, 2 и 5 курсов"
+    void courseComesFromTheSheetAndOnTheSheetThatMixesCoursesFromTheGroupCodeConfirmedByTheTitle() {
+        // sheets "1 курс" .. "4 курс" name their course; "5 курс + магистры" says "1, 2 и 5 курсов", the codes say which
+        // (spring 2025-2026: admitted 2021 = 5th course, "Ум-251" = admitted 2025 = 1st course)
         Map<Integer, List<String>> byCourse = schedule.groups().stream().collect(Collectors.groupingBy(
                 g -> g.course() == null ? 0 : g.course(), Collectors.mapping(ParsedGroup::code, Collectors.toList())));
 
-        assertThat(byCourse.get(1)).hasSize(10).contains("У-251", "УБ-52");
+        assertThat(byCourse).doesNotContainKey(0);
+        assertThat(byCourse.get(1)).hasSize(14).contains("У-251", "УБ-52", "Ум-251", "Ум-254");
         assertThat(byCourse.get(2)).hasSize(8).contains("У-241");
         assertThat(byCourse.get(3)).hasSize(8).contains("У-231");
         assertThat(byCourse.get(4)).hasSize(10).contains("У-220", "УБ-23");
-        assertThat(byCourse.get(0)).containsExactly("УБ-11", "УБ-12", "Ум-251", "Ум-252", "Ум-253", "Ум-254");
+        assertThat(byCourse.get(5)).containsExactly("УБ-11", "УБ-12");
     }
 
     @Test

@@ -103,6 +103,7 @@ final class GridSheetParser {
     private final GridFormat format;
     private final LessonTextParser textParser;
     private final DiagnosticsCollector diagnostics;
+    private final Integer academicYearFrom;
 
     private Sheet sheet;
     private MergedRegions merged;
@@ -113,7 +114,9 @@ final class GridSheetParser {
     private int hiddenCells;
     private SourceLocation firstHiddenCell;
 
-    GridSheetParser(GridFormat format, DiagnosticsCollector diagnostics) {
+    /** @param academicYearFrom year the academic year started in (2026 for 2026-2027), {@code null} if unknown */
+    GridSheetParser(GridFormat format, DiagnosticsCollector diagnostics, Integer academicYearFrom) {
+        this.academicYearFrom = academicYearFrom;
         this.format = format;
         this.textParser = format.lessonTextParser();
         this.diagnostics = diagnostics;
@@ -203,9 +206,12 @@ final class GridSheetParser {
      *       file for courses 2-4 has merged bands "2 КУРС" / "3 КУРС" / "4 КУРС" over its groups);</li>
      *   <li>otherwise the sheet as a whole, if its name and the texts above the group row name exactly one course
      *       between them (FUITS: sheet "1 курс", title "учебных занятий 1 курса");</li>
-     *   <li>otherwise unknown: a sheet "1, 2 и 5 курсов" mixes courses, and groups under no band are not guessed.</li>
+     *   <li>a sheet that names several courses ("1, 2 и 5 курсов": masters and 5th-year bachelors) does not say which
+     *       group is which, so the admission year in the group code decides ("Ум-261" = admitted 2026 = course 1 in
+     *       2026-2027, "УБ-21" = 2022 = course 5) <em>but only if that course is one the sheet names</em>;</li>
+     *   <li>otherwise unknown, reported.</li>
      * </ol>
-     * Group codes are not used: their digits are not a reliable year (SPO "ИСП-215" sits next to the 2nd course).
+     * A course taken from a code is reported once per sheet, so it is visible that it is a derivation.
      */
     private List<ParsedGroup> resolveCourses(Header header, List<GroupColumns> groups) {
         List<CourseMention> mentions = courseMentionsAbove(header.groupRow());
@@ -215,14 +221,28 @@ final class GridSheetParser {
 
         List<ParsedGroup> result = new ArrayList<>();
         List<String> unknown = new ArrayList<>();
+        List<String> derived = new ArrayList<>();
         for (GroupColumns group : groups) {
             Set<Integer> fromBands = new TreeSet<>();
             mentions.stream().filter(m -> m.namesOneCourseAt(group.firstCol())).forEach(m -> fromBands.addAll(m.courses()));
             Integer course = fromBands.size() == 1 ? fromBands.iterator().next() : fromBands.isEmpty() ? sheetCourse : null;
+            if (course == null && fromBands.isEmpty() && sheetCourses.size() > 1 && academicYearFrom != null) {
+                Integer fromCode = GroupCodeYear.courseOf(group.code(), academicYearFrom);
+                if (fromCode != null && sheetCourses.contains(fromCode)) {
+                    course = fromCode;
+                    derived.add(group.code() + "=" + fromCode);
+                }
+            }
             if (course == null) {
                 unknown.add(group.code());
             }
             result.add(new ParsedGroup(group.code(), course));
+        }
+        if (!derived.isEmpty()) {
+            diagnostics.warn("COURSE_FROM_GROUP_CODE", "The sheet names the courses " + sheetCourses + " without saying which "
+                    + "group is which; the course was taken from the admission year in the group code (academic year "
+                    + academicYearFrom + "-" + (academicYearFrom + 1) + "): " + String.join(", ", derived),
+                    location(header.groupRow(), header.timeCol()), null);
         }
         if (!unknown.isEmpty()) {
             diagnostics.warn("GROUP_COURSE_UNKNOWN", "The sheet does not state the course of group(s) " + String.join(", ", unknown)

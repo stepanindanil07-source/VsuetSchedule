@@ -5,9 +5,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.ByteArrayInputStream;
 import java.time.DayOfWeek;
+import java.time.LocalDate;
 import java.time.LocalTime;
 import org.junit.jupiter.api.Test;
 import ru.vsuet.schedule.academic.domain.AcademicTerm;
+import ru.vsuet.schedule.importer.parser.ParseContext;
 import ru.vsuet.schedule.importer.parser.ParseIssue;
 import ru.vsuet.schedule.importer.parser.ParsedEntry;
 import ru.vsuet.schedule.importer.parser.ParsedSchedule;
@@ -459,6 +461,64 @@ class FuitsExcelParserTest {
             assertThat(i.code()).isEqualTo("GROUP_COURSE_UNKNOWN");
             assertThat(i.message()).contains("Ум-1", "УБ-1");
         });
+    }
+
+    private static WorkbookFixture mixedSheet(String semesterText, Object... groups) {
+        return WorkbookFixture.xlsx().sheet("5 курс + магистры", semesterText, groups).put("A1", "учебных занятий  1, 2 и 5 курсов")
+                .day("ВТОРНИК").slot("08.00-09.35", 2).put("C3", LESSON);
+    }
+
+    private static final ParseContext AUTUMN_2026 = new ParseContext(LocalDate.of(2026, 9, 1), 2026);
+
+    @Test
+    void onASheetThatMixesCoursesTheAdmissionYearInTheGroupCodeDecidesWhenTheTitleNamesThatCourse() {
+        // "Ум-261" admitted 2026 = course 1, "Ум-251" = 2, "УБ-21" (one digit of the year) admitted 2022 = course 5
+        ParsedSchedule s = parser.parse(mixedSheet("осеннего семестра 2026-2027", "Ум-261", 1, "Ум-251", 1, "УБ-21", 1).stream());
+
+        assertThat(s.groups()).extracting(g -> g.code() + ":" + g.course()).containsExactly("Ум-261:1", "Ум-251:2", "УБ-21:5");
+        assertThat(s.diagnostics().issues()).singleElement().satisfies(i -> {
+            assertThat(i.code()).isEqualTo("COURSE_FROM_GROUP_CODE");
+            assertThat(i.severity()).isEqualTo(ru.vsuet.schedule.importer.parser.IssueSeverity.WARNING);
+            assertThat(i.message()).contains("Ум-261=1", "Ум-251=2", "УБ-21=5");
+        });
+    }
+
+    @Test
+    void aCourseTheTitleDoesNotNameIsNotAcceptedEvenIfTheCodeSaysSo() {
+        // "Х-231" says course 4 but the sheet names only 1, 2 and 5: not a master of this sheet, left empty and reported
+        ParsedSchedule s = parser.parse(mixedSheet("осеннего семестра 2026-2027", "Ум-261", 1, "Х-231", 1).stream());
+
+        assertThat(s.groups()).extracting(g -> g.code() + ":" + g.course()).containsExactly("Ум-261:1", "Х-231:null");
+        assertThat(s.diagnostics().issues()).extracting(ParseIssue::code)
+                .containsExactlyInAnyOrder("COURSE_FROM_GROUP_CODE", "GROUP_COURSE_UNKNOWN");
+    }
+
+    @Test
+    void aCodeWithoutAYearIsLeftEmpty() {
+        ParsedSchedule s = parser.parse(mixedSheet("осеннего семестра 2026-2027", "Магистры", 1, "Ум-1", 1).stream());
+
+        assertThat(s.groups()).extracting(g -> g.course()).containsExactly(null, null);
+        assertThat(s.diagnostics().issues()).extracting(ParseIssue::code).containsExactly("GROUP_COURSE_UNKNOWN");
+    }
+
+    @Test
+    void theImportersAcademicYearBeatsASemesterTextThatIsWrongInTheFile() {
+        // the file says 2025-2026 by mistake (eiu.xlsx does), the source is pinned to 2026-2027
+        ParsedSchedule withoutContext = parser.parse(mixedSheet("осеннего семестра 2025-2026", "Эмм-61", 1, "ЭБ-21", 1).stream());
+        ParsedSchedule pinned = parser.parse(mixedSheet("осеннего семестра 2025-2026", "Эмм-61", 1, "ЭБ-21", 1).stream(), AUTUMN_2026);
+
+        assertThat(withoutContext.groups()).extracting(g -> g.course()).as("2025 puts them outside the named courses")
+                .containsExactly(null, null);
+        assertThat(pinned.groups()).extracting(g -> g.code() + ":" + g.course()).containsExactly("Эмм-61:1", "ЭБ-21:5");
+    }
+
+    @Test
+    void aSheetThatStatesItsCourseIsNeverOverriddenByTheCode() {
+        // sheet "3 курс": "Ум-261" would be course 1 by its code, but the sheet says 3
+        WorkbookFixture f = WorkbookFixture.xlsx().sheet("3 курс", SEMESTER, "Ум-261", 1).put("A1", "учебных занятий  3 курса")
+                .day("ВТОРНИК").slot("08.00-09.35", 2).put("C3", LESSON);
+
+        assertThat(parser.parse(f.stream(), AUTUMN_2026).groups()).extracting(g -> g.course()).containsExactly(3);
     }
 
     @Test

@@ -87,10 +87,14 @@ study_group (version per group) · schedule_entry · import_run (history)
   re-reads the file (groups whose lessons did not change keep their schedule version).
 - **Semester not stated in a file** (2-3-4_kurs.xls, zao/5_kurs.xlsx): the source must be pinned to a period, otherwise the import is
   rejected before anything is written.
-- **Course of a group** is read from the sheet, never from the group code: a merged band above the groups
-  ("2 КУРС" in 2-3-4_kurs.xls) wins; otherwise the sheet name and title, if they name exactly one course ("1 курс",
-  "учебных занятий 1 курса"). Sheets that mix courses ("1, 2 и 5 курсов", masters) and SPO groups under no band
-  get `course = null` and a `GROUP_COURSE_UNKNOWN` warning.
+- **Course of a group** is read from the sheet: a merged band above the groups ("2 КУРС" in 2-3-4_kurs.xls) wins;
+  otherwise the sheet name and title, if they name exactly one course ("1 курс", "учебных занятий 1 курса"). A sheet
+  that names several courses ("1, 2 и 5 курсов": masters and 5th-year bachelors) does not say which group is which, so
+  the admission year in the group code decides ("Ум-261" = admitted 2026 = course 1 in 2026-2027; "УБ-21" = 2022 =
+  course 5) **only if the sheet's title names that course**; otherwise the course stays empty with a
+  `GROUP_COURSE_UNKNOWN` warning. A derived course is reported once per sheet (`COURSE_FROM_GROUP_CODE`). The academic
+  year comes from the period the source is pinned to (eiu.xlsx states its semester wrongly). On the 245 groups whose
+  sheets state the course, the code rule agrees every time. Masters have only courses 1 and 2.
 - **Hidden columns and rows are not read.** The SPO files keep stale groups and lessons in columns hidden in Excel
   (2-3-4_kurs.xls: 8 groups in D:R, plus extra columns of 4-column group headers; 1_kurs.xls: 12 hidden columns).
   What Excel does not show is not part of the schedule: groups with no visible column are dropped, a lesson merged over

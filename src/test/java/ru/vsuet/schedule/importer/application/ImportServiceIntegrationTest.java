@@ -153,6 +153,22 @@ class ImportServiceIntegrationTest {
     }
 
     @Test
+    void courseOfGroupsOnAMixedSheetUsesTheAcademicYearOfThePinnedPeriodNotTheWrongTextInTheFile() {
+        // eiu.xlsx-like: the sheet says 2025-2026 although the source is pinned to autumn 2026-2027
+        source.pinToPeriod(autumn2026.getId());
+        sources.save(source);
+        byte[] file = bytes(WorkbookFixture.xlsx().sheet("5 курс + магистры", "осеннего семестра 2025-2026 учебного года",
+                        "Эмм-61", 1, "ЭБ-21", 1).put("A1", "учебных занятий  1 и 5 курсов")
+                .day("ПОНЕДЕЛЬНИК").slot("08.00-09.35", 2).put("C3", PHYSICS).put("D3", CHEMISTRY));
+
+        ImportResult result = importService.importFile(source.getId(), file);
+
+        assertThat(result.status()).isEqualTo(ImportStatus.SUCCESS);
+        assertThat(groupsByCode().get("Эмм-61").getCourse()).isEqualTo(1);
+        assertThat(groupsByCode().get("ЭБ-21").getCourse()).isEqualTo(5);
+    }
+
+    @Test
     void sameFileIsReadAgainWhenItWasImportedByAnOlderVersionOfTheParser() {
         importService.importFile(source.getId(), fileA());
         jdbc.update("UPDATE import_run SET parser_version = 'old'");
