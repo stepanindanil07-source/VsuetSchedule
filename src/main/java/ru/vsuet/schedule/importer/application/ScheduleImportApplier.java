@@ -127,19 +127,28 @@ public class ScheduleImportApplier {
         return new ImportResult(ImportStatus.SUCCESS, runId, "Imported", created, updated, unchanged, deactivated, written);
     }
 
-    /** The source's pinned period wins over the semester text in the file; a mismatch is only a warning. */
+    /**
+     * The source's pinned period wins over the semester text in the file (a mismatch is only a warning). A file that
+     * does not state its semester at all can only be imported by a pinned source.
+     */
     private AcademicPeriod resolvePeriod(ScheduleSource source, ParsedSchedule parsed, List<ParseIssue> issues) {
         var filePeriod = parsed.period();
         if (source.getAcademicPeriodId() != null) {
             AcademicPeriod pinned = periods.findById(source.getAcademicPeriodId())
                     .orElseThrow(() -> new IllegalStateException("Pinned period " + source.getAcademicPeriodId() + " not found"));
-            if (pinned.getYearFrom() != filePeriod.yearFrom() || pinned.getTerm() != filePeriod.term()) {
+            if (filePeriod != null && (pinned.getYearFrom() != filePeriod.yearFrom() || pinned.getTerm() != filePeriod.term())) {
                 issues.add(new ParseIssue(IssueSeverity.WARNING, "PERIOD_PINNED_MISMATCH",
                         "File says " + filePeriod.term() + " " + filePeriod.yearFrom() + "-" + filePeriod.yearTo()
                                 + " but the source is pinned to " + pinned.getTerm() + " " + pinned.getYearFrom() + "-"
                                 + pinned.getYearTo() + "; the pinned period is used", null, null));
             }
             return pinned;
+        }
+        if (filePeriod == null) {
+            throw new ImportRejectedException("The file does not state its semester and the source is not pinned to an "
+                    + "academic period; pin the source (schedule_source.academic_period_id) before importing",
+                    List.of(new ParseIssue(IssueSeverity.ERROR, "PERIOD_UNKNOWN",
+                            "No semester in the file and no pinned period", null, null)));
         }
         return periods.findByYearFromAndTerm((short) filePeriod.yearFrom(), filePeriod.term())
                 .orElseThrow(() -> new ImportRejectedException(

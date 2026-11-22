@@ -31,6 +31,7 @@ import ru.vsuet.schedule.importer.infrastructure.ImportRunRepository;
 import ru.vsuet.schedule.importer.infrastructure.ScheduleSourceRepository;
 import ru.vsuet.schedule.importer.parser.fuits.FuitsExcelParser;
 import ru.vsuet.schedule.importer.parser.fuits.WorkbookFixture;
+import ru.vsuet.schedule.importer.parser.spo.SpoExcelParser;
 import ru.vsuet.schedule.schedule.domain.ScheduleEntry;
 import ru.vsuet.schedule.schedule.infrastructure.ScheduleEntryRepository;
 
@@ -298,6 +299,43 @@ class ImportServiceIntegrationTest {
         assertThat(groups.count()).isZero();
         assertThat(entries.count()).isZero();
         assertThat(runs.findById(result.runId()).orElseThrow().getDiagnostics()).contains("PERIOD_NOT_REGISTERED");
+    }
+
+    // ---- files that do not state their semester (SPO 2-3-4_kurs.xls) ----------------------------------
+
+    private static byte[] spoFileWithoutSemester() {
+        return bytes(WorkbookFixture.xls().sheetSpo("Лист3", null, "А-1", 2, "Б-1", 2)
+                .day("ПОНЕДЕЛЬНИК").slot("1) 8 00", 2).slot("2) 9 45", 2)
+                .put("C5", PHYSICS).put("E5", CHEMISTRY));
+    }
+
+    @Test
+    void fileWithoutSemesterNeedsAPinnedSourceOtherwiseNothingIsWritten() {
+        ScheduleSource spo = sources.save(new ScheduleSource(unit.getId(), SpoExcelParser.KEY, "https://example.test/spo.xls"));
+
+        ImportResult result = importService.importFile(spo.getId(), spoFileWithoutSemester());
+
+        assertThat(result.status()).isEqualTo(ImportStatus.FAILED);
+        assertThat(result.message()).contains("does not state its semester").contains("pin");
+        assertThat(groups.count()).isZero();
+        assertThat(entries.count()).isZero();
+        assertThat(runs.findById(result.runId()).orElseThrow().getDiagnostics()).contains("PERIOD_UNKNOWN");
+    }
+
+    @Test
+    void pinnedSourceImportsAFileWithoutSemesterIntoItsPeriod() {
+        ScheduleSource spo = new ScheduleSource(unit.getId(), SpoExcelParser.KEY, "https://example.test/spo.xls");
+        spo.pinToPeriod(autumn2026.getId());
+        spo = sources.save(spo);
+
+        ImportResult result = importService.importFile(spo.getId(), spoFileWithoutSemester());
+
+        assertThat(result.status()).isEqualTo(ImportStatus.SUCCESS);
+        assertThat(entries.findAll()).hasSize(2).allSatisfy(e -> assertThat(e.getPeriodId()).isEqualTo(autumn2026.getId()));
+        ImportRun run = runs.findById(result.runId()).orElseThrow();
+        assertThat(run.getPeriodId()).isEqualTo(autumn2026.getId());
+        assertThat(run.getDiagnostics()).doesNotContain("PERIOD_PINNED_MISMATCH");
+        assertThat(groupsByCode()).containsOnlyKeys("А-1", "Б-1");
     }
 
     // ---- pinned period -----------------------------------------------------------------------------------

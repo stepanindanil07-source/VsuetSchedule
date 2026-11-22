@@ -16,7 +16,7 @@ docker compose up -d postgres          # PostgreSQL 17 on localhost:5433
 
 - API: <http://localhost:8080/api/v1/faculties> · Swagger UI: <http://localhost:8080/swagger-ui.html> ·
   OpenAPI: <http://localhost:8080/v3/api-docs>
-- Flyway creates the schema and seeds the 5 faculties, their file URLs and the autumn 2026–2027 semester.
+- Flyway creates the schema and seeds the 6 faculties (5 grid `.xlsx` + SPO `.xls`), their file URLs and the autumn 2026–2027 semester.
 - Sources are imported every hour. Change it with `VSUET_IMPORT_CRON` (e.g. `"0/30 * * * * *"` = every 30 s) or
   switch it off with `VSUET_IMPORT_SCHEDULER_ENABLED=false`.
 - Database settings: `DB_URL`, `DB_USER`, `DB_PASSWORD`.
@@ -53,8 +53,12 @@ study_group (version per group) · schedule_entry · import_run (history)
   by the university; every other week follows by alternating. The schedule response carries this anchor.
 - **A new semester** needs a row in `academic_period` before its files can be imported. A source can be pinned to a
   period (`schedule_source.academic_period_id`) when the semester text inside its file is wrong (eiu.xlsx is).
-- **A new layout** (SPO `.xls`, correspondence courses) = a new `ScheduleParser` implementation with its own key;
-  nothing else changes.
+- **Parsers:** `vsuet-grid-xlsx` (uits, itf, eht, tf, eiu) and `spo-xls` (fspo/1_kurs.xls, fspo/2-3-4_kurs.xls) share
+  one grid engine (`importer/parser/grid`: header, groups, days, slots, merged-cell geometry) and differ only in the
+  cell-text notation, time notation and a few policies (`GridFormat`). A new layout (correspondence courses) = a new
+  `ScheduleParser` with its own key; nothing else changes.
+- **Semester not stated in a file** (2-3-4_kurs.xls): the source must be pinned to a period, otherwise the import is
+  rejected before anything is written.
 - Module layout: `academic` (faculties, groups, periods), `schedule` (lessons, read API), `importer`
   (sources, parsers, import), `common`.
 
