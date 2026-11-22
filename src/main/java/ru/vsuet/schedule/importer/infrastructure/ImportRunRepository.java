@@ -11,6 +11,8 @@ public interface ImportRunRepository extends JpaRepository<ImportRun, Long> {
 
     Optional<ImportRun> findFirstBySourceIdOrderByIdDesc(Long sourceId);
 
+    Optional<ImportRun> findFirstBySourceIdAndStatusOrderByIdDesc(Long sourceId, ImportStatus status);
+
     List<ImportRun> findBySourceIdOrderByIdDesc(Long sourceId, Limit limit);
 
     Optional<ImportRun> findFirstBySourceIdAndPeriodIdAndStatusOrderByIdDesc(Long sourceId, Long periodId, ImportStatus status);

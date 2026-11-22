@@ -20,7 +20,8 @@ import ru.vsuet.schedule.importer.parser.grid.LessonTextParser;
 public class SpoExcelParser extends GridWorkbookParser {
 
     public static final String KEY = "spo-xls";
-    static final String VERSION = "1";
+    /** 2: columns and rows hidden in Excel are ignored; the course of each group is read from the sheet. */
+    static final String VERSION = "2";
 
     public SpoExcelParser() {
         super(KEY, VERSION, new SpoFormat(), false);

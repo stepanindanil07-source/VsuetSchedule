@@ -24,10 +24,16 @@ final class GroupContentHasher {
         return Hashes.sha256Hex(periodId + "\n" + body);
     }
 
+    /**
+     * The date is appended only to dated lessons: the line of a weekly lesson must stay byte for byte what it was before
+     * dates existed, otherwise deploying the correspondence parser would raise the schedule version of every group and
+     * make every installed app download everything once for nothing.
+     */
     private static String line(ParsedEntry e) {
-        return String.join(String.valueOf(SEP),
-                String.valueOf(e.dayOfWeek().getValue()), String.valueOf(e.date()), e.startTime().toString(), e.endTime().toString(),
+        String line = String.join(String.valueOf(SEP),
+                String.valueOf(e.dayOfWeek().getValue()), e.startTime().toString(), e.endTime().toString(),
                 e.weekType().name(), String.valueOf(e.subgroup()), e.subject(), e.lessonType().name(),
                 String.valueOf(e.teacherText()), String.valueOf(e.roomText()));
+        return e.date() == null ? line : line + SEP + e.date();
     }
 }

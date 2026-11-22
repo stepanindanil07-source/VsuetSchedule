@@ -153,6 +153,25 @@ class ImportServiceIntegrationTest {
     }
 
     @Test
+    void sameFileIsReadAgainWhenItWasImportedByAnOlderVersionOfTheParser() {
+        importService.importFile(source.getId(), fileA());
+        jdbc.update("UPDATE import_run SET parser_version = 'old'");
+        jdbc.update("UPDATE study_group SET course = NULL");
+
+        ImportResult result = importService.importFile(source.getId(), fileA());
+
+        assertThat(result.status()).isEqualTo(ImportStatus.SUCCESS);
+        assertThat(result.groupsUnchanged()).as("same lessons: no new schedule version").isEqualTo(2);
+        assertThat(result.entriesWritten()).isZero();
+        assertThat(groupsByCode().values()).allSatisfy(g -> {
+            assertThat(g.getScheduleVersion()).isEqualTo(1);
+            assertThat(g.getCourse()).as("what the newer parser learned is stored").isEqualTo(1);
+        });
+        assertThat(importService.importFile(source.getId(), fileA()).status())
+                .as("and now it is current again").isEqualTo(ImportStatus.SKIPPED_UNCHANGED);
+    }
+
+    @Test
     void onlyTheGroupThatChangedGetsANewVersionAndNewRows() {
         importService.importFile(source.getId(), fileA());
         Set<Long> group1Before = entryIds(groupsByCode().get("Г-1"));

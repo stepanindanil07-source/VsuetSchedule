@@ -10,6 +10,7 @@ import ru.vsuet.schedule.academic.domain.AcademicPeriod;
 import ru.vsuet.schedule.academic.infrastructure.AcademicPeriodRepository;
 import ru.vsuet.schedule.common.Hashes;
 import ru.vsuet.schedule.importer.domain.ImportRun;
+import ru.vsuet.schedule.importer.domain.ImportStatus;
 import ru.vsuet.schedule.importer.domain.ScheduleSource;
 import ru.vsuet.schedule.importer.infrastructure.ImportRunRepository;
 import ru.vsuet.schedule.importer.infrastructure.ScheduleSourceRepository;
@@ -19,6 +20,7 @@ import ru.vsuet.schedule.importer.parser.ParseIssue;
 import ru.vsuet.schedule.importer.parser.ParsedSchedule;
 import ru.vsuet.schedule.importer.parser.ParserRegistry;
 import ru.vsuet.schedule.importer.parser.ScheduleParseException;
+import ru.vsuet.schedule.importer.parser.ScheduleParser;
 
 /**
  * Orchestrates one import: hash the file, skip it if unchanged, parse it, then hand the result to
@@ -59,13 +61,13 @@ public class ImportService {
         ImportRun run = runs.save(ImportRun.start(sourceId, sha256, clock.instant()));
 
         try {
-            if (sha256.equals(source.getLastSha256())) {
+            ScheduleParser parser = parsers.get(source.getParserKey());
+            if (sha256.equals(source.getLastSha256()) && lastImportUsedCurrentParser(sourceId, parser)) {
                 run.unchanged(clock.instant());
                 runs.save(run);
                 return ImportResult.unchanged(run.getId());
             }
-            ParsedSchedule parsed = parsers.get(source.getParserKey())
-                    .parse(new ByteArrayInputStream(content), contextOf(source));
+            ParsedSchedule parsed = parser.parse(new ByteArrayInputStream(content), contextOf(source));
             return applier.apply(run.getId(), sourceId, parsed, sha256);
         } catch (ScheduleParseException e) {
             return fail(run, e.getMessage(), e.diagnostics(), List.of(), e);
@@ -74,6 +76,17 @@ public class ImportService {
         } catch (RuntimeException e) {
             return fail(run, "Unexpected error: " + e.getMessage(), null, List.of(), e);
         }
+    }
+
+    /**
+     * A byte-identical file is skipped only if it was imported by the same version of its parser: a better parser
+     * must be able to re-read a file that did not change (new fields, a fixed bug), otherwise the stored data would
+     * stay as the old parser left it until the university happens to publish a new file.
+     */
+    private boolean lastImportUsedCurrentParser(long sourceId, ScheduleParser parser) {
+        return runs.findFirstBySourceIdAndStatusOrderByIdDesc(sourceId, ImportStatus.SUCCESS)
+                .map(r -> parser.version().equals(r.getParserVersion()))
+                .orElse(false);
     }
 
     /** The pinned period's first day, if the source is pinned (read-only lookup, no transaction needed). */

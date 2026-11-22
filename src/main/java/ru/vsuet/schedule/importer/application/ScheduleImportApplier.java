@@ -65,8 +65,9 @@ public class ScheduleImportApplier {
                 .orElseThrow(() -> new IllegalStateException("Schedule source " + sourceId + " disappeared"));
         ImportRun run = runs.findById(runId).orElseThrow();
 
-        // Another import of the same file may have committed while this one was parsing.
-        if (sha256.equals(source.getLastSha256())) {
+        // Another import of the same file may have committed while this one was parsing. Only an import by the same
+        // parser version counts: an older parser's result must be replaced (see ImportService).
+        if (sha256.equals(source.getLastSha256()) && committedByTheSameParser(sourceId, parsed)) {
             run.unchanged(now);
             return ImportResult.unchanged(runId);
         }
@@ -126,6 +127,12 @@ public class ScheduleImportApplier {
         run.succeeded(period.getId(), diagnostics.parserVersion(), diagnostics.totalFound(), diagnostics.recognized(),
                 diagnostics.skipped(), ImportDiagnosticsJson.write(diagnostics, importIssues), now);
         return new ImportResult(ImportStatus.SUCCESS, runId, "Imported", created, updated, unchanged, deactivated, written);
+    }
+
+    private boolean committedByTheSameParser(long sourceId, ParsedSchedule parsed) {
+        return runs.findFirstBySourceIdAndStatusOrderByIdDesc(sourceId, ImportStatus.SUCCESS)
+                .map(r -> parsed.diagnostics().parserVersion().equals(r.getParserVersion()))
+                .orElse(false);
     }
 
     /**

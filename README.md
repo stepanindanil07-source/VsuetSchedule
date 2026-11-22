@@ -82,6 +82,9 @@ study_group (version per group) · schedule_entry · import_run (history)
   first one that puts the date on or after the period start, and the weekday written next to the date is checked
   against it), and `schedule_source.default_course` gives the groups their course. Two teachers/rooms or two parallel
   subjects of one cell stay one lesson showing both.
+- **Unchanged files** (same SHA-256) are skipped only if they were imported by the *current version of their parser*
+  (`ScheduleParser.version()`); bump it whenever a parser's output for the same file can change, and the next import
+  re-reads the file (groups whose lessons did not change keep their schedule version).
 - **Semester not stated in a file** (2-3-4_kurs.xls, zao/5_kurs.xlsx): the source must be pinned to a period, otherwise the import is
   rejected before anything is written.
 - **Course of a group** is read from the sheet, never from the group code: a merged band above the groups
