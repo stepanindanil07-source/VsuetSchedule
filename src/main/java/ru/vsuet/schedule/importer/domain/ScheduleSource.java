@@ -62,6 +62,19 @@ public class ScheduleSource {
         this.academicPeriodId = periodId;
     }
 
+    /**
+     * Pins the source to another period (or to none). The remembered file hash is dropped: the same, unchanged file
+     * must be imported again into the new period instead of being skipped as "already imported".
+     */
+    public void changePinnedPeriod(Long periodId) {
+        this.academicPeriodId = periodId;
+        this.lastSha256 = null;
+    }
+
+    public void enable() {
+        this.enabled = true;
+    }
+
     public void setDefaultCourse(Integer course) {
         this.defaultCourse = course;
     }

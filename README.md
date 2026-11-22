@@ -20,6 +20,8 @@ docker compose up -d postgres          # PostgreSQL 17 on localhost:5433
 - Sources are imported every hour. Change it with `VSUET_IMPORT_CRON` (e.g. `"0/30 * * * * *"` = every 30 s) or
   switch it off with `VSUET_IMPORT_SCHEDULER_ENABLED=false`.
 - Database settings: `DB_URL`, `DB_USER`, `DB_PASSWORD`.
+- Administrative API: set `VSUET_ADMIN_TOKEN` (any long random string). Without it `/api/v1/admin/**` is switched off
+  and answers 404 as if it did not exist.
 
 Tests (need Docker for Testcontainers): `./mvnw verify`.
 
@@ -33,6 +35,22 @@ Tests (need Docker for Testcontainers): `./mvnw verify`.
 | `GET /groups/{id}/schedule/version` | version of the group's schedule (ETag, 304) |
 
 Errors are RFC 9457 `application/problem+json`.
+
+### Administrative API (`/api/v1/admin`, header `Authorization: Bearer <VSUET_ADMIN_TOKEN>`)
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /periods` · `POST /periods` · `PUT /periods/{id}` | semesters and the week-parity anchor |
+| `GET /sources` | the schedule files: unit, parser, pinned semester, latest import |
+| `PUT /sources/{id}/period` · `PUT /sources/{id}/enabled` | pin a file to a semester (or unpin) · switch it on/off |
+| `POST /sources/{id}/import` · `POST /imports` | download and import one file / every enabled file now |
+| `GET /sources/{id}/runs` · `GET /import-runs/{runId}/diagnostics` | import history · what the parser found |
+
+A new semester is registered with `POST /periods` **before** its files can be imported (`firstWeekStart` must be a
+Monday and contain the first day of the semester; dates must not overlap another semester). Then re-pin the files
+that are pinned to the old one (`eiu.xlsx`, both SPO files, the correspondence file): the next import re-reads them
+even if the file did not change. Changing the anchor of an existing semester raises the schedule version of all its
+groups, so cached apps reload the new parity. Full request/response shapes: Swagger UI.
 
 ## How it works
 

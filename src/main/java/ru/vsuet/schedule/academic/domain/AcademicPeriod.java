@@ -63,6 +63,17 @@ public class AcademicPeriod {
         this.firstWeekType = firstWeekType;
     }
 
+    /** Changes the dates and the week-parity anchor; the identity (term and year) stays. */
+    public void reschedule(LocalDate startDate, LocalDate endDate, LocalDate firstWeekStart, WeekType firstWeekType) {
+        if (firstWeekType == WeekType.EVERY_WEEK) {
+            throw new IllegalArgumentException("The first week must be NUMERATOR or DENOMINATOR");
+        }
+        this.startDate = startDate;
+        this.endDate = endDate;
+        this.firstWeekStart = firstWeekStart;
+        this.firstWeekType = firstWeekType;
+    }
+
     /**
      * Parity of the week that contains {@code date}. Weeks alternate starting from {@code firstWeekStart};
      * dates before it follow the same pattern backwards.
