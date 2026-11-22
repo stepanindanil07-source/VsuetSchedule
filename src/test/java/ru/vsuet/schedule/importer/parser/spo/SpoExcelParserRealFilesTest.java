@@ -65,14 +65,32 @@ class SpoExcelParserRealFilesTest {
     }
 
     @Test
-    void firstYearFileEveryLessonCellIsAccountedForOnlyOneLessonIsRejected() {
-        // 348 lesson cells were counted independently (apache poi dump); shared lessons count once per group
-        assertThat(firstYear.diagnostics().skipped()).isEqualTo(1);
-        assertThat(errorCodes(firstYear)).containsExactly("MERGE_CROSSES_BOUNDARY");
-        ParseIssue rejected = firstYear.diagnostics().issues().stream()
-                .filter(i -> i.severity() == IssueSeverity.ERROR).findFirst().orElseThrow();
-        assertThat(rejected.location().position()).isEqualTo("AI63:AL63");
-        assertThat(firstYear.entries()).hasSize(417);
+    void firstYearFileEveryVisibleLessonCellIsAccountedFor() {
+        // Counted independently with plain POI: 351 visible non-empty cells reach 405 (cell, group) pairs. Columns
+        // T, X, AK:AN, AU:AV, AY:BB are hidden in Excel; 13 non-empty cells in them are stale leftovers.
+        assertThat(firstYear.diagnostics().skipped()).isZero();
+        assertThat(errorCodes(firstYear)).isEmpty();
+        assertThat(firstYear.entries()).hasSize(405);
+        assertThat(firstYear.diagnostics().issues()).filteredOn(i -> i.code().equals("HIDDEN_CELLS_IGNORED"))
+                .singleElement().satisfies(i -> assertThat(i.message()).startsWith("13 non-empty cell(s)"));
+    }
+
+    @Test
+    void lessonMergedOverHiddenColumnsIsAWholeGroupLessonOfItsVisibleColumns() {
+        // AI63:AL63 reaches into the hidden AK:AL, which belong to no group: it is just the whole of РПО-268 (AI:AJ)
+        ParsedEntry e = only(firstYear, "РПО-268", "AI63:AL63");
+
+        assertThat(e.subgroup()).isNull();
+        assertThat(firstYear.diagnostics().issues()).extracting(ParseIssue::code).doesNotContain("PARTIAL_SPAN_AS_WHOLE_GROUP");
+    }
+
+    @Test
+    void lessonsInHiddenColumnsOfAGroupAreNotShown() {
+        // ЭБ-262 is AW:AZ but AY:AZ are hidden: the stale "МАТЕМАТИКА" cells AY68:AZ69 and AY70:AZ71 must not appear
+        assertThat(firstYear.entries()).filteredOn(e -> e.groupCode().equals("ЭБ-262"))
+                .extracting(e -> e.location().position()).noneMatch(p -> p.startsWith("AY"));
+        assertThat(firstYear.entries()).filteredOn(e -> e.groupCode().equals("ЭБ-262"))
+                .extracting(e -> e.location().position()).contains("AW60:AX61");
     }
 
     @Test
@@ -118,11 +136,19 @@ class SpoExcelParserRealFilesTest {
     }
 
     @Test
-    void secondToFourthYearFileHasSixtyFourGroupsWithNormalisedCodes() {
-        assertThat(secondToFourthYear.groups()).hasSize(64);
+    void secondToFourthYearFileHasFiftySixVisibleGroupsWithNormalisedCodes() {
+        // 8 more groups (ЛКК-2111 ... К-212) stand in hidden columns D:R and are not part of the schedule
+        assertThat(secondToFourthYear.groups()).hasSize(56);
         assertThat(secondToFourthYear.groups()).extracting(ParsedGroup::code)
-                .contains("ЛКК-2111", "ИСП-216 б", "ИСП-255", "ИСП-2510", "ТГ-249")
-                .doesNotContain("ИСП -255");
+                .contains("ИСП-255", "ИСП-2510", "ТГ-249")
+                .doesNotContain("ИСП -255", "ЛКК-2111", "ИСП-216 б");
+    }
+
+    @Test
+    void groupsInHiddenColumnsAreIgnoredAndReported() {
+        assertThat(secondToFourthYear.diagnostics().issues()).filteredOn(i -> i.code().equals("HIDDEN_GROUPS_IGNORED"))
+                .singleElement().satisfies(i -> assertThat(i.message()).startsWith("8 group(s)")
+                        .contains("ЛКК-2111", "ПКД-218", "ПКД-219", "ИСП-215", "ИСП-216", "ИСП-216 б", "КС-213", "К-212"));
     }
 
     @Test
@@ -140,20 +166,17 @@ class SpoExcelParserRealFilesTest {
         assertThat(course("ТХС-241")).isEqualTo(3);   // first group under the 3rd-course band
         assertThat(course("ПКД-249")).isEqualTo(3);
         assertThat(course("ТХС-231")).isEqualTo(4);
-        assertThat(course("ПКД-239")).isEqualTo(4);   // DY:EB sticks out of the band DA:DZ; its first column is inside
-        assertThat(secondToFourthYear.groups()).filteredOn(g -> g.course() != null).hasSize(56);
+        assertThat(course("ПКД-239")).isEqualTo(4);   // header DY:EB, but EA:EB are hidden: visible DY:DZ is inside DA:DZ
+        assertThat(secondToFourthYear.groups()).filteredOn(g -> g.course() == 2).hasSize(20);
+        assertThat(secondToFourthYear.groups()).filteredOn(g -> g.course() == 3).hasSize(23);
+        assertThat(secondToFourthYear.groups()).filteredOn(g -> g.course() == 4).hasSize(13);
     }
 
     @Test
-    void groupsLeftOfTheCourseBandsHaveNoCourseAndAreReported() {
-        // D..R: "10 МЕСЯЦЕВ" over ЛКК-2111 and groups with no band above them; their course is not guessed
-        assertThat(secondToFourthYear.groups()).filteredOn(g -> g.course() == null).extracting(ParsedGroup::code)
-                .containsExactly("ЛКК-2111", "ПКД-218", "ПКД-219", "ИСП-215", "ИСП-216", "ИСП-216 б", "КС-213", "К-212");
-        assertThat(secondToFourthYear.diagnostics().issues()).filteredOn(i -> i.code().equals("GROUP_COURSE_UNKNOWN"))
-                .singleElement().satisfies(i -> {
-                    assertThat(i.severity()).isEqualTo(IssueSeverity.WARNING);
-                    assertThat(i.message()).contains("ЛКК-2111", "К-212");
-                });
+    void everyVisibleGroupOfTheFileHasACourse() {
+        // the groups that used to lack one stood in hidden columns D:R
+        assertThat(secondToFourthYear.groups()).extracting(ParsedGroup::course).doesNotContainNull();
+        assertThat(secondToFourthYear.diagnostics().issues()).extracting(ParseIssue::code).doesNotContain("GROUP_COURSE_UNKNOWN");
     }
 
     private static Integer course(String group) {
@@ -161,14 +184,15 @@ class SpoExcelParserRealFilesTest {
     }
 
     @Test
-    void secondToFourthYearFileEveryLessonCellIsAccountedFor() {
-        // 943 lesson cells were counted independently; two lessons cannot be placed and are reported as errors
-        assertThat(secondToFourthYear.diagnostics().skipped()).isEqualTo(2);
-        assertThat(errorCodes(secondToFourthYear)).containsExactlyInAnyOrder("MERGE_CROSSES_BOUNDARY", "TEXT_OUTSIDE_TIME_SLOT");
-        assertThat(secondToFourthYear.diagnostics().issues())
-                .filteredOn(i -> i.code().equals("TEXT_OUTSIDE_TIME_SLOT"))
-                .singleElement().satisfies(i -> assertThat(i.location().position()).isEqualTo("AO116:AP117"));
-        assertThat(secondToFourthYear.entries()).hasSize(1160);
+    void secondToFourthYearFileEveryVisibleLessonCellIsAccountedFor() {
+        // Counted independently with plain POI: 984 visible non-empty cells (41 of them time labels) reach 1144
+        // (cell, group) pairs. Rows 116-119 and columns D:R, EA:EC are hidden; 18 non-empty cells in them are ignored,
+        // among them the lesson AO116:AP117 whose time cell was shifted, and the merge DY86:EC87 that reached hidden EA:EC.
+        assertThat(secondToFourthYear.diagnostics().skipped()).isZero();
+        assertThat(errorCodes(secondToFourthYear)).isEmpty();
+        assertThat(secondToFourthYear.entries()).hasSize(1144);
+        assertThat(secondToFourthYear.diagnostics().issues()).filteredOn(i -> i.code().equals("HIDDEN_CELLS_IGNORED"))
+                .singleElement().satisfies(i -> assertThat(i.message()).startsWith("18 non-empty cell(s)"));
     }
 
     @Test

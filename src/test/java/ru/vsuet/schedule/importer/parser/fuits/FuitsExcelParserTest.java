@@ -356,6 +356,82 @@ class FuitsExcelParserTest {
         assertThat(s.diagnostics().issues()).extracting(ParseIssue::code).containsExactly("EMPTY_SHEET_IGNORED");
     }
 
+    // ---- columns and rows hidden in Excel ----------------------------------------------------------------
+
+    @Test
+    void groupWhoseColumnsAreAllHiddenIsIgnoredAndReported() {
+        // Г-1 = C:D, Г-2 = E; E is hidden
+        ParsedSchedule s = parse(standard().hideColumn("E").put("C3", LESSON).put("E3", LESSON));
+
+        assertThat(s.groups()).extracting(g -> g.code()).containsExactly("Г-1");
+        assertThat(s.entries()).hasSize(1);
+        assertThat(s.diagnostics().issues()).extracting(ParseIssue::code)
+                .containsExactlyInAnyOrder("HIDDEN_GROUPS_IGNORED", "HIDDEN_CELLS_IGNORED");
+        assertThat(s.diagnostics().issues()).filteredOn(i -> i.code().equals("HIDDEN_GROUPS_IGNORED"))
+                .singleElement().satisfies(i -> assertThat(i.message()).contains("Г-2"));
+    }
+
+    @Test
+    void hiddenColumnOfAGroupIsNotASubgroup() {
+        // Г-1 = C:D with D hidden: one visible column, so no subgroups; a lesson there is for the whole group
+        ParsedSchedule s = parse(standard().hideColumn("D").put("C3", LESSON));
+
+        assertScope(entryAt(s, "C3"), WeekType.NUMERATOR, null);
+        assertThat(s.diagnostics().issues()).isEmpty();
+    }
+
+    @Test
+    void lessonInAHiddenColumnIsNotReadButCounted() {
+        ParsedSchedule s = parse(standard().hideColumn("D").put("C3", LESSON).put("D5", LESSON));
+
+        assertThat(s.entries()).extracting(e -> e.location().position()).containsExactly("C3");
+        assertThat(s.diagnostics().issues()).singleElement().satisfies(i -> {
+            assertThat(i.code()).isEqualTo("HIDDEN_CELLS_IGNORED");
+            assertThat(i.message()).startsWith("1 non-empty cell(s)");
+            assertThat(i.location().position()).isEqualTo("D5");
+        });
+    }
+
+    @Test
+    void mergeReachingIntoHiddenColumnsCoversTheVisibleOnesOnly() {
+        // Г-1 = C:D, Г-3 = E:G with F and G hidden: a lesson merged over E:G is a whole-group lesson of the one visible column
+        WorkbookFixture f = WorkbookFixture.xlsx().sheet("1 курс", SEMESTER, "Г-1", 2, "Г-3", 3)
+                .day("ПОНЕДЕЛЬНИК").slot("08.00-09.35", 2)
+                .hideColumn("F").hideColumn("G")
+                .put("E3", LESSON).merge("E3:G4");
+
+        ParsedSchedule s = parse(f);
+
+        assertThat(s.groups()).extracting(g -> g.code()).containsExactly("Г-1", "Г-3");
+        assertScope(entryAt(s, "E3:G4"), WeekType.EVERY_WEEK, null);
+        assertThat(s.diagnostics().issues()).isEmpty();
+    }
+
+    @Test
+    void lessonInAHiddenRowIsNotReadButCounted() {
+        ParsedSchedule s = parse(standard().hideRow(5).hideRow(6).put("C3", LESSON).put("C5", LESSON));
+
+        assertThat(s.entries()).extracting(e -> e.location().position()).containsExactly("C3");
+        assertThat(s.diagnostics().issues()).singleElement().satisfies(i -> {
+            assertThat(i.code()).isEqualTo("HIDDEN_CELLS_IGNORED");
+            assertThat(i.location().position()).isEqualTo("C5");
+        });
+    }
+
+    @Test
+    void sharedLessonOverGroupsWithHiddenColumnsBetweenThemStillCoversBoth() {
+        // Г-1 = C:D, Г-2 = E, Г-3 = F:H; F hidden between Г-2 and the visible G:H of Г-3
+        WorkbookFixture f = WorkbookFixture.xlsx().sheet("1 курс", SEMESTER, "Г-1", 2, "Г-2", 1, "Г-3", 3)
+                .day("ПОНЕДЕЛЬНИК").slot("08.00-09.35", 2)
+                .hideColumn("F")
+                .put("E3", LESSON).merge("E3:H4");
+
+        ParsedSchedule s = parse(f);
+
+        assertThat(s.entries()).extracting(e -> e.groupCode()).containsExactlyInAnyOrder("Г-2", "Г-3");
+        assertThat(s.diagnostics().issues()).isEmpty();
+    }
+
     // ---- course of a group -------------------------------------------------------------------------------
 
     @Test

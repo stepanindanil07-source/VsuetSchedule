@@ -63,6 +63,11 @@ study_group (version per group) · schedule_entry · import_run (history)
   ("2 КУРС" in 2-3-4_kurs.xls) wins; otherwise the sheet name and title, if they name exactly one course ("1 курс",
   "учебных занятий 1 курса"). Sheets that mix courses ("1, 2 и 5 курсов", masters) and SPO groups under no band
   get `course = null` and a `GROUP_COURSE_UNKNOWN` warning.
+- **Hidden columns and rows are not read.** The SPO files keep stale groups and lessons in columns hidden in Excel
+  (2-3-4_kurs.xls: 8 groups in D:R, plus extra columns of 4-column group headers; 1_kurs.xls: 12 hidden columns).
+  What Excel does not show is not part of the schedule: groups with no visible column are dropped, a lesson merged over
+  hidden columns counts for the visible ones only, subgroups are numbered among visible columns. Ignored cells are
+  never silent: `HIDDEN_GROUPS_IGNORED` / `HIDDEN_CELLS_IGNORED` warnings carry the counts.
 - Module layout: `academic` (faculties, groups, periods), `schedule` (lessons, read API), `importer`
   (sources, parsers, import), `common`.
 

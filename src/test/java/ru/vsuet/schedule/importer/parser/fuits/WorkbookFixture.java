@@ -146,6 +146,22 @@ public final class WorkbookFixture {
         return this;
     }
 
+    /** Hides a column of the current sheet the way Excel's "Hide" does, e.g. {@code hideColumn("E")}. */
+    public WorkbookFixture hideColumn(String column) {
+        current.sheet.setColumnHidden(CellReference.convertColStringToIndex(column), true);
+        return this;
+    }
+
+    /** Hides a row (1-based Excel number) of the current sheet. */
+    public WorkbookFixture hideRow(int excelRow) {
+        Row row = current.sheet.getRow(excelRow - 1);
+        if (row == null) {
+            row = current.sheet.createRow(excelRow - 1);
+        }
+        row.setZeroHeight(true);
+        return this;
+    }
+
     public InputStream stream() {
         for (SheetState s : sheets) {
             writeLayout(s);

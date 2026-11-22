@@ -63,10 +63,26 @@ final class GridSheetParser {
             "(?iu)(?<![\\d\\p{L}])((?:[1-6]\\s*(?:,|и)\\s*)*[1-6])(?:\\s*-?\\s*(?:й|го|ого))?\\s*курс");
     private static final Pattern COURSE_DIGIT = Pattern.compile("[1-6]");
 
-    /** Group columns: {@code firstCol..lastCol} inclusive, zero-based. */
-    private record GroupColumns(String code, int firstCol, int lastCol) {
+    /**
+     * The <em>visible</em> columns of a group, zero-based, ascending. Columns hidden in Excel are not part of the
+     * schedule people see (the SPO files keep stale groups and lessons in hidden columns), so they are not here and
+     * subgroups are numbered among the visible columns only.
+     */
+    private record GroupColumns(String code, List<Integer> columns) {
+        int firstCol() {
+            return columns.getFirst();
+        }
+
+        int lastCol() {
+            return columns.getLast();
+        }
+
         int width() {
-            return lastCol - firstCol + 1;
+            return columns.size();
+        }
+
+        int subgroupIndex(int col) {
+            return columns.indexOf(col) + 1;
         }
     }
 
@@ -93,6 +109,9 @@ final class GridSheetParser {
     private List<GroupColumns> allGroups = List.of();
     private int slotsWithDerivedEnd;
     private SourceLocation firstDerivedEnd;
+    private List<String> hiddenGroups = new ArrayList<>();
+    private int hiddenCells;
+    private SourceLocation firstHiddenCell;
 
     GridSheetParser(GridFormat format, DiagnosticsCollector diagnostics) {
         this.format = format;
@@ -124,6 +143,9 @@ final class GridSheetParser {
         this.merged = new MergedRegions(sheet);
         this.slotsWithDerivedEnd = 0;
         this.firstDerivedEnd = null;
+        this.hiddenGroups = new ArrayList<>();
+        this.hiddenCells = 0;
+        this.firstHiddenCell = null;
 
         Header header = locateHeader(labelRow);
         if (header == null) {
@@ -147,6 +169,15 @@ final class GridSheetParser {
                 }
             }
             reportTextOutsideSlots(block, slots, groups);
+            countHiddenCells(block, header);
+        }
+        if (!hiddenGroups.isEmpty()) {
+            diagnostics.warn("HIDDEN_GROUPS_IGNORED", hiddenGroups.size() + " group(s) stand in columns hidden in Excel and "
+                    + "were ignored: " + String.join(", ", hiddenGroups), location(header.groupRow(), header.timeCol()), null);
+        }
+        if (hiddenCells > 0) {
+            diagnostics.warn("HIDDEN_CELLS_IGNORED", hiddenCells + " non-empty cell(s) in hidden columns or rows were ignored "
+                    + "(Excel does not show them)", firstHiddenCell, null);
         }
         if (slotsWithDerivedEnd > 0) {
             diagnostics.warn("SLOT_END_DERIVED", slotsWithDerivedEnd + " time slot(s) state only the start time; the end was "
@@ -287,11 +318,58 @@ final class GridSheetParser {
         }
         int count = 0;
         for (Cell cell : row) {
-            if (cell.getColumnIndex() > col && !formatter.formatCellValue(cell).isBlank()) {
+            if (cell.getColumnIndex() > col && isColumnVisible(cell.getColumnIndex())
+                    && !formatter.formatCellValue(cell).isBlank()) {
                 count++;
             }
         }
         return count;
+    }
+
+    private boolean isColumnVisible(int col) {
+        return !sheet.isColumnHidden(col);
+    }
+
+    private boolean isRowHidden(int rowIndex) {
+        Row row = sheet.getRow(rowIndex);
+        return row != null && row.getZeroHeight();
+    }
+
+    /** Smallest visible column strictly right of {@code col}. */
+    private int nextVisibleColumn(int col) {
+        int next = col + 1;
+        while (!isColumnVisible(next)) {
+            next++;
+        }
+        return next;
+    }
+
+    /**
+     * Counts (and remembers the first of) non-empty cells in hidden columns or hidden rows of a day block. They are
+     * not part of the schedule, but silently dropping data is not acceptable either, so the count is reported.
+     */
+    private void countHiddenCells(int[] block, Header header) {
+        for (int r = block[0]; r <= block[1]; r++) {
+            Row row = sheet.getRow(r);
+            if (row == null) {
+                continue;
+            }
+            boolean rowHidden = row.getZeroHeight();
+            for (Cell cell : row) {
+                int c = cell.getColumnIndex();
+                if (c <= header.timeCol() || (!rowHidden && isColumnVisible(c)) || formatter.formatCellValue(cell).isBlank()) {
+                    continue;
+                }
+                CellRangeAddress range = merged.at(r, c);
+                if (range != null && !MergedRegions.isAnchor(range, r, c)) {
+                    continue;
+                }
+                hiddenCells++;
+                if (firstHiddenCell == null) {
+                    firstHiddenCell = location(range, r, c);
+                }
+            }
+        }
     }
 
     private int findLabel(int row, Pattern label) {
@@ -315,7 +393,17 @@ final class GridSheetParser {
             }
             CellRangeAddress range = merged.at(header.groupRow(), col);
             int last = range != null ? range.getLastColumn() : col;
-            groups.add(new GroupColumns(code, col, last));
+            List<Integer> visible = new ArrayList<>();
+            for (int c = col; c <= last; c++) {
+                if (isColumnVisible(c)) {
+                    visible.add(c);
+                }
+            }
+            if (visible.isEmpty()) {
+                hiddenGroups.add(code);
+            } else {
+                groups.add(new GroupColumns(code, List.copyOf(visible)));
+            }
         }
         return groups;
     }
@@ -346,7 +434,7 @@ final class GridSheetParser {
         List<TimeSlot> slots = new ArrayList<>();
         for (int r = firstRow; r <= lastRow; r++) {
             String time = text(r, timeCol);
-            if (time.isBlank()) {
+            if (time.isBlank() || isRowHidden(r)) {
                 continue;
             }
             CellRangeAddress range = merged.at(r, timeCol);
@@ -392,11 +480,11 @@ final class GridSheetParser {
     private void reportTextOutsideSlots(int[] block, List<TimeSlot> slots, List<GroupColumns> groups) {
         for (int r = block[0]; r <= block[1]; r++) {
             final int row = r;
-            if (slots.stream().anyMatch(sl -> row >= sl.firstRow() && row <= sl.lastRow())) {
+            if (isRowHidden(r) || slots.stream().anyMatch(sl -> row >= sl.firstRow() && row <= sl.lastRow())) {
                 continue;
             }
             for (GroupColumns group : groups) {
-                for (int c = group.firstCol(); c <= group.lastCol(); c++) {
+                for (int c : group.columns()) {
                     String text = text(r, c);
                     CellRangeAddress range = merged.at(r, c);
                     if (text.isBlank() || (range != null && !MergedRegions.isAnchor(range, r, c))) {
@@ -412,7 +500,10 @@ final class GridSheetParser {
 
     private void parseGroupInSlot(DayOfWeek day, TimeSlot slot, GroupColumns group, List<ParsedEntry> out) {
         for (int r = slot.firstRow(); r <= slot.lastRow(); r++) {
-            for (int c = group.firstCol(); c <= group.lastCol(); c++) {
+            if (isRowHidden(r)) {
+                continue;
+            }
+            for (int c : group.columns()) {
                 String text = text(r, c);
                 CellRangeAddress range = merged.at(r, c);
                 if (range != null && !MergedRegions.isAnchor(range, r, c)) {
@@ -445,8 +536,21 @@ final class GridSheetParser {
 
         int r1 = range != null ? range.getFirstRow() : row;
         int r2 = range != null ? range.getLastRow() : row;
-        int c1 = range != null ? range.getFirstColumn() : col;
-        int c2 = range != null ? range.getLastColumn() : col;
+        // Only the visible part of a range counts: a lesson merged over hidden columns of its own group (or of
+        // columns that belong to no visible group) is a lesson for the visible columns it covers.
+        int rawC1 = range != null ? range.getFirstColumn() : col;
+        int rawC2 = range != null ? range.getLastColumn() : col;
+        int c1 = rawC1;
+        while (c1 <= rawC2 && !isColumnVisible(c1)) {
+            c1++;
+        }
+        int c2 = rawC2;
+        while (c2 >= rawC1 && !isColumnVisible(c2)) {
+            c2--;
+        }
+        if (c1 > c2) {
+            return;   // entirely in hidden columns: counted by countHiddenCells
+        }
 
         if (r1 < slot.firstRow() || r2 > slot.lastRow() || c1 < group.firstCol()) {
             diagnostics.entrySkipped("MERGE_CROSSES_BOUNDARY",
@@ -499,7 +603,7 @@ final class GridSheetParser {
     private Integer resolveSubgroup(GroupColumns group, int c1, int c2, CellContent content, SourceLocation where, String raw) {
         Integer fromText = content.subgroup();
         boolean whole = isWholeGroup(group, c1, c2);
-        Integer fromColumn = !whole && c1 == c2 ? c1 - group.firstCol() + 1 : null;
+        Integer fromColumn = !whole && c1 == c2 ? group.subgroupIndex(c1) : null;
         if (fromText != null) {
             if (fromColumn != null && !fromColumn.equals(fromText)) {
                 diagnostics.warn("SUBGROUP_MISMATCH", "Text says subgroup " + fromText + " but the column says subgroup "
@@ -534,21 +638,21 @@ final class GridSheetParser {
      */
     private List<GroupSpan> groupsIntersecting(int c1, int c2) {
         List<GroupSpan> spans = new ArrayList<>();
-        int expectedNext = -1;
+        int previousLast = -1;
         for (GroupColumns g : allGroups) {
             if (g.lastCol() < c1 || g.firstCol() > c2) {
                 continue;
             }
-            if (expectedNext != -1 && g.firstCol() != expectedNext) {
+            if (previousLast != -1 && g.firstCol() != nextVisibleColumn(previousLast)) {
                 return List.of();
             }
-            if (expectedNext == -1 && g.firstCol() > c1) {
+            if (previousLast == -1 && g.firstCol() > c1) {
                 return List.of();
             }
             spans.add(new GroupSpan(g, g.firstCol() >= c1 && g.lastCol() <= c2));
-            expectedNext = g.lastCol() + 1;
+            previousLast = g.lastCol();
         }
-        return !spans.isEmpty() && expectedNext > c2 ? spans : List.of();
+        return !spans.isEmpty() && previousLast >= c2 ? spans : List.of();
     }
 
     private void emit(DayOfWeek day, TimeSlot slot, GroupColumns group, WeekType week, Integer subgroup,
