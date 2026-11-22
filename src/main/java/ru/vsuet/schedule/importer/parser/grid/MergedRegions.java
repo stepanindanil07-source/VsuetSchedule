@@ -1,4 +1,4 @@
-package ru.vsuet.schedule.importer.parser.fuits;
+package ru.vsuet.schedule.importer.parser.grid;
 
 import java.util.HashMap;
 import java.util.Map;

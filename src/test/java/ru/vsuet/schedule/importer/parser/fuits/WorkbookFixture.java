@@ -33,6 +33,7 @@ public final class WorkbookFixture {
 
     private static final class SheetState {
         final Sheet sheet;
+        boolean spo;
         final List<String> dayNames = new ArrayList<>();
         final List<List<Slot>> slots = new ArrayList<>();
 
@@ -75,6 +76,31 @@ public final class WorkbookFixture {
             int span = (Integer) groups[i + 1];
             cell(1, col).setCellValue((String) groups[i]);
             mergeIfMany(1, 1, col, col + span - 1);
+            col += span;
+        }
+        return this;
+    }
+
+    /**
+     * Starts a sheet laid out like the SPO workbooks (Excel rows, 1-based): semester text in B1; the labels
+     * "Дни недели" (A) and "время" (B) merged over rows 2-4; group codes in row 3, each merged over its columns and
+     * rows 3-4; lessons from row 5. Slots are written by {@link #slot} (e.g. "1) 8 00" or "8.00-9.35").
+     */
+    public WorkbookFixture sheetSpo(String name, String semesterText, Object... groups) {
+        startSheet(name);
+        current.spo = true;
+        if (semesterText != null) {
+            cell(0, 1).setCellValue(semesterText);
+        }
+        cell(1, 0).setCellValue("Дни недели ");
+        cell(1, 1).setCellValue("время");
+        mergeIfMany(1, 3, 0, 0);
+        mergeIfMany(1, 3, 1, 1);
+        int col = 2;
+        for (int i = 0; i < groups.length; i += 2) {
+            int span = (Integer) groups[i + 1];
+            cell(2, col).setCellValue((String) groups[i]);
+            current.sheet.addMergedRegion(new CellRangeAddress(2, 3, col, col + span - 1));
             col += span;
         }
         return this;
@@ -139,7 +165,7 @@ public final class WorkbookFixture {
 
     private void writeLayout(SheetState s) {
         current = s;
-        int row = 2;
+        int row = s.spo ? 4 : 2;
         for (int d = 0; d < s.dayNames.size(); d++) {
             int dayStart = row;
             for (Slot slot : s.slots.get(d)) {

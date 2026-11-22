@@ -6,9 +6,10 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
-import ru.vsuet.schedule.importer.parser.fuits.CellTextParser.CellContent;
-import ru.vsuet.schedule.importer.parser.fuits.CellTextParser.Rejected;
-import ru.vsuet.schedule.importer.parser.fuits.CellTextParser.Result;
+import ru.vsuet.schedule.importer.parser.grid.LessonTextParser;
+import ru.vsuet.schedule.importer.parser.grid.LessonTextParser.CellContent;
+import ru.vsuet.schedule.importer.parser.grid.LessonTextParser.Rejected;
+import ru.vsuet.schedule.importer.parser.grid.LessonTextParser.Result;
 import ru.vsuet.schedule.schedule.domain.LessonType;
 
 /** Every example below is a real cell text taken from uits.xlsx (spring 2025-2026). */
@@ -181,7 +182,7 @@ class CellTextParserTest {
 
             assertThat(c.lessonType()).isEqualTo(LessonType.OTHER);
             assertThat(c.subject()).isEqualTo("Физика");
-            assertThat(c.warnings()).extracting(CellTextParser.Warning::code).containsExactly("UNKNOWN_LESSON_MARKER");
+            assertThat(c.warnings()).extracting(LessonTextParser.Warning::code).containsExactly("UNKNOWN_LESSON_MARKER");
             assertThat(c.warnings().getFirst().message()).contains("сем");
         }
 
@@ -191,7 +192,7 @@ class CellTextParserTest {
 
             assertThat(c.teacherText()).isEqualTo("Иванов И.");
             assertThat(c.roomText()).isEqualTo("12");
-            assertThat(c.warnings()).extracting(CellTextParser.Warning::code).containsExactly("UNRECOGNIZED_DETAIL");
+            assertThat(c.warnings()).extracting(LessonTextParser.Warning::code).containsExactly("UNRECOGNIZED_DETAIL");
         }
 
         @Test

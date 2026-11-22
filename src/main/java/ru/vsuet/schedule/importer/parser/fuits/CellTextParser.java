@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import ru.vsuet.schedule.importer.parser.grid.LessonTextParser;
 import ru.vsuet.schedule.schedule.domain.LessonType;
 
 /**
@@ -18,7 +19,7 @@ import ru.vsuet.schedule.schedule.domain.LessonType;
  * teachers and rooms stay free text (joined with ", "), unknown markers produce a {@link Warning}.
  * The class is stateless and knows nothing about Excel geometry.
  */
-final class CellTextParser {
+public final class CellTextParser implements LessonTextParser {
 
     private static final Pattern TYPE_MARKER = Pattern.compile("^(\\p{Ll}{1,6})\\.(?=\\S)(.*)$");
     private static final Pattern SPACES = Pattern.compile("\\s+");
@@ -31,28 +32,8 @@ final class CellTextParser {
     private static final Pattern TEACHER_PREFIX = Pattern.compile(
             "^(\\p{Lu}[\\p{L}_]+(?:-\\p{Lu}[\\p{L}_]+)?\\s+\\p{Lu}\\.\\s?\\p{Lu}[.,]*)(?:\\s+(.+))?$");
 
-    sealed interface Result permits CellContent, Rejected {
-    }
-
-    /**
-     * @param teacherText teachers joined with ", ", or {@code null} when the cell has none
-     * @param roomText    rooms joined with ", ", or {@code null} when the cell has none
-     */
-    record CellContent(LessonType lessonType, String subject, String teacherText, String roomText,
-                       List<Warning> warnings) implements Result {
-        CellContent {
-            warnings = List.copyOf(warnings);
-        }
-    }
-
-    /** The text cannot be turned into a lesson; {@code code} is a stable machine-readable reason. */
-    record Rejected(String code, String message) implements Result {
-    }
-
-    record Warning(String code, String message) {
-    }
-
-    Result parse(String text) {
+    @Override
+    public Result parse(String text) {
         if (text == null || text.isBlank()) {
             return new Rejected("EMPTY_TEXT", "Cell text is empty");
         }
@@ -93,7 +74,7 @@ final class CellTextParser {
         return new CellContent(type, subject,
                 teachers.isEmpty() ? null : String.join(", ", teachers),
                 rooms.isEmpty() ? null : String.join(", ", rooms),
-                warnings);
+                null, warnings);
     }
 
     /** "пр." / "л." / "лаб." alone on the first line. */

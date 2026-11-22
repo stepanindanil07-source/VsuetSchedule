@@ -290,7 +290,10 @@ class FuitsExcelParserTest {
         ParsedSchedule s = parse(f);
 
         assertThat(s.entries()).extracting(e -> e.location().position()).containsExactly("C5");
-        assertThat(s.diagnostics().issues()).extracting(ParseIssue::code).containsExactly("UNPARSEABLE_TIME");
+        // the lesson in the unreadable slot is reported as skipped, not lost silently
+        assertThat(s.diagnostics().issues()).extracting(ParseIssue::code)
+                .containsExactly("UNPARSEABLE_TIME", "TEXT_OUTSIDE_TIME_SLOT");
+        assertThat(s.diagnostics().skipped()).isEqualTo(1);
     }
 
     // ---- diagnostics from cell text ----------------------------------------------------------------------
