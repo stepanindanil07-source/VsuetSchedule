@@ -37,6 +37,28 @@ jobs:
       - run: npm run typecheck
       - run: npm test
 
+  mobile:
+    # Мобильное приложение: типы и тесты (экраны, синхронизация, SQLite) на реальных файлах расписания. Сборка APK здесь не проверяется
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: |
+            core-ts/package-lock.json
+            mobile/package-lock.json
+      # приложение подключает исходники ядра, а SheetJS лежит в зависимостях ядра
+      - run: npm ci
+        working-directory: core-ts
+      - run: npm ci
+        working-directory: mobile
+      - run: npx tsc --noEmit
+        working-directory: mobile
+      - run: npx jest
+        working-directory: mobile
+
   image:
     runs-on: ubuntu-latest
     needs: test

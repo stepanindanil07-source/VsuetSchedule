@@ -23,6 +23,7 @@ export function GroupPicker({ onDone, initialGroupId }: { onDone: () => void; in
   const [subgroups, setSubgroups] = useState<number[]>([]);
   const [subgroup, setSubgroup] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
+  const [unitsOpen, setUnitsOpen] = useState(true);
 
   useEffect(() => {
     void datasets.units().then(setUnits);
@@ -76,9 +77,27 @@ export function GroupPicker({ onDone, initialGroupId }: { onDone: () => void; in
       <Title>Выберите группу</Title>
 
       <Section title="Факультет">
-        {units.map((u) => (
-          <Choice key={u.id} label={u.name} selected={u.id === unitId} onPress={() => { setUnitId(u.id); setCourse(undefined); setGroup(null); setGroups([]); }} />
-        ))}
+        {units
+          .filter((u) => unitsOpen || u.id === unitId)
+          .map((u) => (
+            <Choice
+              key={u.id}
+              label={u.name}
+              selected={u.id === unitId}
+              onPress={() => {
+                if (u.id === unitId && !unitsOpen) {
+                  setUnitsOpen(true); // нажатие на выбранный факультет снова открывает список
+                  return;
+                }
+                setUnitId(u.id);
+                setUnitsOpen(false);
+                setCourse(undefined);
+                setGroup(null);
+                setGroups([]);
+              }}
+            />
+          ))}
+        {!unitsOpen && <Body muted>Нажмите на факультет, чтобы выбрать другой.</Body>}
       </Section>
 
       {unitId !== null && (

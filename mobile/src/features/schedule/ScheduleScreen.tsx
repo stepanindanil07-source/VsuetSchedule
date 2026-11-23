@@ -49,8 +49,8 @@ export function ScheduleScreen() {
         if (lessons.length === 0 && date > addDays(monday, 5)) return null; // воскресенье без занятий не показываем
         return (
           <View key={date} style={styles.day}>
-            <Text style={{ color: isToday ? t.primary : t.text, fontWeight: '700', fontSize: 16, textTransform: 'capitalize' }}>
-              {weekdayName(days.indexOf(date) + 1)}, {dayMonth(date)}
+            <Text style={{ color: isToday ? t.primary : t.text, fontWeight: '700', fontSize: 16 }}>
+              {capitalize(weekdayName(days.indexOf(date) + 1))}, {dayMonth(date)}
               {isToday ? ' · сегодня' : ''}
             </Text>
             {lessons.length === 0 ? (
@@ -66,6 +66,8 @@ export function ScheduleScreen() {
     </ScrollView>
   );
 }
+
+const capitalize = (text: string): string => text.charAt(0).toUpperCase() + text.slice(1);
 
 function NavButton({ label, hint, onPress }: { label: string; hint: string; onPress: () => void }) {
   const t = useTheme();

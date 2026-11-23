@@ -55,6 +55,8 @@ export interface SyncDeps {
   /** Пауза, чтобы интерфейс успел перерисоваться между тяжёлыми шагами; в тестах пустая. */
   yieldToUi?: () => Promise<void>;
   sleep?: (ms: number) => Promise<void>;
+  /** Монотонные миллисекунды для замера этапов; по умолчанию Date.now. */
+  clock?: () => number;
 }
 
 export type SyncStage = 'CHECKING' | 'PARSING' | 'BUILDING' | 'SAVING';
@@ -91,6 +93,8 @@ export type SyncResult = {
   usedOfflineCopies: boolean;
   /** Сети не касались: недавняя проверка. */
   skipped: boolean;
+  /** Сколько миллисекунд заняли этапы (загрузка и проверка, разбор, сборка и сохранение). */
+  timings: { downloadMs: number; parseMs: number; buildMs: number; totalMs: number } | null;
 };
 
 export interface SyncOptions {
@@ -112,6 +116,7 @@ interface Acquired {
 
 export class SyncService {
   private running: Promise<SyncResult> | null = null;
+  private marks: { start: number; downloaded: number | null; parsed: number | null; built: number | null } = { start: 0, downloaded: null, parsed: null, built: null };
 
   constructor(private readonly deps: SyncDeps) {}
 
@@ -134,7 +139,7 @@ export class SyncService {
     const enabled = config.sources.filter((s) => s.enabled);
 
     if (options.force !== true && (await this.checkedRecently()) && (await this.datasetMatchesRegistry(enabled))) {
-      return { outcome: 'UP_TO_DATE', datasetVersion: (await datasets.info())?.datasetVersion ?? null, message: 'Расписание проверено недавно', sources: [], problems: [], usedOfflineCopies: false, skipped: true };
+      return { outcome: 'UP_TO_DATE', datasetVersion: (await datasets.info())?.datasetVersion ?? null, message: 'Расписание проверено недавно', sources: [], problems: [], usedOfflineCopies: false, skipped: true, timings: null };
     }
 
     const syncId = await app.beginSync(this.nowIso());
@@ -142,10 +147,11 @@ export class SyncService {
     try {
       result = await this.syncSources(enabled, syncId, options);
     } catch (error) {
-      result = { outcome: 'FAILED', datasetVersion: null, message: `Синхронизация не удалась: ${(error as Error).message}`, sources: [], problems: [], usedOfflineCopies: false, skipped: false };
+      result = { outcome: 'FAILED', datasetVersion: null, message: `Синхронизация не удалась: ${(error as Error).message}`, sources: [], problems: [], usedOfflineCopies: false, skipped: false, timings: null };
     }
+    result = this.withTimings(result);
     try {
-      await app.finishSync(syncId, this.nowIso(), result.outcome, result.datasetVersion, result.message);
+      await app.finishSync(syncId, this.nowIso(), result.outcome, result.datasetVersion, describe(result));
     } catch {
       // журнал вспомогателен: его сбой не должен менять результат синхронизации
     }
@@ -156,6 +162,8 @@ export class SyncService {
     const { app, datasets, config, parsers } = this.deps;
     const progress = options.onProgress ?? (() => undefined);
 
+    const clock = this.deps.clock ?? Date.now;
+    this.marks = { start: clock(), downloaded: null, parsed: null, built: null };
     // 1. Проверка и загрузка (сеть)
     let checked = 0;
     progress({ stage: 'CHECKING', completed: 0, total: enabled.length });
@@ -164,6 +172,7 @@ export class SyncService {
       progress({ stage: 'CHECKING', completed: ++checked, total: enabled.length, sourceName: source.name });
       return a;
     });
+    this.marks.downloaded = clock();
     const contacted = acquired.some((a) => a.status === 'FETCHED' || a.status === 'NOT_MODIFIED');
     const usedOffline = acquired.some((a) => a.status === 'OFFLINE_CACHED');
 
@@ -202,6 +211,7 @@ export class SyncService {
         problems: [],
         usedOfflineCopies: usedOffline,
         skipped: false,
+        timings: null,
       };
     }
 
@@ -232,6 +242,7 @@ export class SyncService {
       parsed++;
     }
 
+    this.marks.parsed = clock();
     // 4. Сборка набора и подмена
     progress({ stage: 'BUILDING', completed: 0, total: 1 });
     await this.deps.yieldToUi?.();
@@ -249,6 +260,7 @@ export class SyncService {
       datasets,
     );
     progress({ stage: 'SAVING', completed: 1, total: 1 });
+    this.marks.built = clock();
 
     // 5. Файлы, которые разобрались, становятся рабочими копиями (даже если весь набор отклонён по другой причине)
     await this.touchMeta(acquired, shaOf, parsedMeta);
@@ -256,10 +268,10 @@ export class SyncService {
 
     if (outcome.status === 'PUBLISHED') {
       const v = outcome.dataset.manifest.datasetVersion;
-      return { outcome: 'PUBLISHED', datasetVersion: v, message: v === 1 ? 'Расписание загружено' : `Расписание обновлено (версия ${v})`, sources: reports, problems: outcome.dataset.manifest.warnings, usedOfflineCopies: usedOffline, skipped: false };
+      return { outcome: 'PUBLISHED', datasetVersion: v, message: v === 1 ? 'Расписание загружено' : `Расписание обновлено (версия ${v})`, sources: reports, problems: outcome.dataset.manifest.warnings, usedOfflineCopies: usedOffline, skipped: false, timings: null };
     }
     if (outcome.status === 'UNCHANGED') {
-      return { outcome: 'UNCHANGED', datasetVersion: outcome.datasetVersion, message: 'Файлы изменились, но расписание осталось прежним', sources: reports, problems: outcome.warnings, usedOfflineCopies: usedOffline, skipped: false };
+      return { outcome: 'UNCHANGED', datasetVersion: outcome.datasetVersion, message: 'Файлы изменились, но расписание осталось прежним', sources: reports, problems: outcome.warnings, usedOfflineCopies: usedOffline, skipped: false, timings: null };
     }
     const kept = outcome.keptDatasetVersion;
     return {
@@ -270,6 +282,7 @@ export class SyncService {
       problems: outcome.reasons,
       usedOfflineCopies: usedOffline,
       skipped: false,
+      timings: null,
     };
   }
 
@@ -367,9 +380,27 @@ export class SyncService {
     return enabled.every((s) => info.manifest.sources.find((m) => m.sourceId === s.id)?.parserVersion === this.deps.parsers.get(s.parserId).parserVersion);
   }
 
+  /** Добавляет к результату длительность этапов (загрузка, разбор, сборка с сохранением), если синхронизация дошла до сборки. */
+  private withTimings(result: SyncResult): SyncResult {
+    const clock = this.deps.clock ?? Date.now;
+    const m = this.marks;
+    const end = clock();
+    if (m.downloaded === null) return result;
+    const parsedAt = m.parsed ?? end;
+    return { ...result, timings: { downloadMs: m.downloaded - m.start, parseMs: parsedAt - m.downloaded, buildMs: (m.built ?? end) - parsedAt, totalMs: end - m.start } };
+  }
+
   private nowIso(): string {
     return this.deps.now().toISOString();
   }
+}
+
+/** Строка для журнала: сообщение и, если есть, время этапов. */
+function describe(result: SyncResult): string {
+  const t = result.timings;
+  if (t === null) return result.message;
+  const sec = (ms: number): string => (ms / 1000).toFixed(1);
+  return `${result.message} (${sec(t.totalMs)} с: проверка и загрузка ${sec(t.downloadMs)}, разбор ${sec(t.parseMs)}, сборка и сохранение ${sec(t.buildMs)})`;
 }
 
 /** Выполняет действие над элементами не более чем `limit` одновременно, сохраняя порядок результатов. */

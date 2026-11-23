@@ -16,7 +16,8 @@
       "package": "dev.vsuetschedule.app"
     },
     "plugins": [
-      "expo-sqlite"
+      "expo-sqlite",
+      "./plugins/withNetworkSecurityConfig"
     ]
   }
 }
