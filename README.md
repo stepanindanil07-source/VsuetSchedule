@@ -25,6 +25,20 @@ docker compose up -d postgres          # PostgreSQL 17 on localhost:5433
 
 Tests (need Docker for Testcontainers): `./mvnw verify`.
 
+### Production
+
+`compose.prod.yml` runs PostgreSQL, the application (image built from the `Dockerfile`, profile `prod`), a Caddy reverse
+proxy that obtains the HTTPS certificate, and a daily database backup. Setup, monitoring (`/actuator/health/imports`),
+backups and restore, and the semester switch are in [docs/OPERATIONS.md](docs/OPERATIONS.md) (in Russian).
+
+```bash
+cp .env.example .env          # fill in DOMAIN, DB_PASSWORD, VSUET_ADMIN_TOKEN
+docker compose -f compose.prod.yml up -d --build
+```
+
+Only `/api/v1/**` and `/actuator/health/imports` are public. Health URLs (`/actuator/health/liveness|readiness|imports`)
+answer without details; no other actuator endpoint is exposed.
+
 ## Endpoints (`/api/v1`)
 
 | Endpoint | Purpose |

@@ -1,0 +1,34 @@
+name: CI
+
+# Every push and pull request: the full test suite (the integration tests start PostgreSQL through Testcontainers, which
+# needs Docker; GitHub's ubuntu runners have it) and a check that the production image and compose file still build.
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - name: Build and test
+        run: ./mvnw -B verify
+
+  image:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Production compose file is valid
+        run: docker compose -f compose.prod.yml config --quiet
+        env:
+          DOMAIN: localhost
+          DB_PASSWORD: ci-only
+      - name: Production image builds
+        run: docker build -t vsuet-schedule:ci .

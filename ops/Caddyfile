@@ -1,0 +1,32 @@
+# Reverse proxy. HTTPS certificates for a real domain are obtained and renewed by Caddy itself (ports 80 and 443 must
+# be reachable from the internet). With DOMAIN=http://localhost it serves plain HTTP for a trial run on one machine.
+{$DOMAIN} {
+	encode zstd gzip
+
+	# the public API for the mobile app, and its documentation (the application answers 404 for the
+	# documentation unless SWAGGER_ENABLED=true)
+	handle /api/* {
+		reverse_proxy app:8080
+	}
+	handle /v3/api-docs* {
+		reverse_proxy app:8080
+	}
+	handle /swagger-ui* {
+		reverse_proxy app:8080
+	}
+
+	# the one health URL an external uptime monitor needs ("is the schedule still being updated?"); no details are sent
+	handle /actuator/health/imports {
+		reverse_proxy app:8080
+	}
+
+	# everything else (other health URLs, any other actuator path) is not public
+	handle {
+		respond "Not found" 404
+	}
+
+	# Optional: allow the administrative API only from your own addresses.
+	#   @admin path /api/v1/admin/*
+	#   @notOffice not remote_ip 203.0.113.0/24
+	#   respond @admin @notOffice 403
+}
