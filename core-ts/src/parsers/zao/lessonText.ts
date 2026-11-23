@@ -17,6 +17,7 @@ const SEVERAL_SPACES = /\s{2,}|\n/;
 export interface ZaoLesson {
   kind: 'lesson';
   type: LessonType;
+  rawType: string | null;
   subject: string;
   subgroup: number | null;
   teacher: string | null;
@@ -39,10 +40,12 @@ export function parseZaoLesson(subjectCell: string, teacherCell: string, roomOnS
   const warnings: ZaoLesson['warnings'] = [];
 
   let type: LessonType = 'OTHER';
+  let rawType: string | null = null;
   const parts = [...lines];
   const marker = TYPE_MARKER.exec(parts[0]);
   if (marker) {
     const code = marker[1];
+    rawType = `${code}.`;
     parts[0] = marker[2];
     switch (code) {
       case 'л':
@@ -89,6 +92,7 @@ export function parseZaoLesson(subjectCell: string, teacherCell: string, roomOnS
   return {
     kind: 'lesson',
     type,
+    rawType,
     subject: subjects.join(' / '),
     subgroup,
     teacher: joined(splitTeachers(teacherCell)),

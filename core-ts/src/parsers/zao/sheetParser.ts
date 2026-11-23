@@ -292,6 +292,7 @@ export class ZaoSheetParser {
       subgroup: parsed.subgroup,
       subject: parsed.subject,
       lessonType: parsed.type,
+      rawLessonType: parsed.rawType,
       teacher: parsed.teacher,
       room: parsed.room,
       rawText: raw,

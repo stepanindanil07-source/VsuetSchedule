@@ -15,7 +15,7 @@ export interface Golden {
   parserVersion: string;
   period: { yearFrom: number; yearTo: number; term: string } | null;
   groups: ParsedGroup[];
-  entries: ParsedEntry[];
+  entries: Array<Omit<ParsedEntry, 'rawLessonType'>>;
   diagnostics: { totalFound: number; recognized: number; skipped: number; issues: Array<Omit<ParseIssue, 'rawText'>> };
 }
 
@@ -24,7 +24,7 @@ export function golden(name: string): Golden {
 }
 
 /** Первые расхождения двух списков записей, читаемо: чтобы при сбое сразу видеть, что именно разошлось. */
-export function firstDifferences<T>(actual: T[], expected: T[], key: (x: T) => string, limit = 5): string[] {
+export function firstDifferences<A, E>(actual: A[], expected: E[], key: (x: A | E) => string, limit = 5): string[] {
   const out: string[] = [];
   const n = Math.max(actual.length, expected.length);
   for (let i = 0; i < n && out.length < limit; i++) {
@@ -35,8 +35,10 @@ export function firstDifferences<T>(actual: T[], expected: T[], key: (x: T) => s
   return out;
 }
 
-export function entryKey(e: ParsedEntry): string {
-  return JSON.stringify(e);
+/** Ключ записи для сверки с эталоном Java: без rawLessonType, которого в выгрузке Java нет (проверяется отдельно). */
+export function entryKey(e: ParsedEntry | Omit<ParsedEntry, 'rawLessonType'>): string {
+  const { rawLessonType: _ignored, ...rest } = e as ParsedEntry;
+  return JSON.stringify(rest);
 }
 
 export function summary(s: ParsedSchedule): string {

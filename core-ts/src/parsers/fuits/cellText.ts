@@ -34,9 +34,11 @@ export class FuitsCellTextParser implements LessonTextParser {
 
     let lessonType: CellContent['lessonType'] = 'OTHER';
     let subject = parts[0];
+    let rawLessonType: string | null = null;
     const marker = TYPE_MARKER.exec(subject);
     if (marker) {
       const code = marker[1];
+      rawLessonType = `${code}.`;
       subject = marker[2];
       switch (code) {
         case 'пр':
@@ -64,6 +66,7 @@ export class FuitsCellTextParser implements LessonTextParser {
     return {
       kind: 'content',
       lessonType,
+      rawLessonType,
       subject,
       teacher: teachers.length === 0 ? null : teachers.join(', '),
       room: rooms.length === 0 ? null : rooms.join(', '),

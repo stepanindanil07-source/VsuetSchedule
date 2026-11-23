@@ -90,9 +90,11 @@ export class SpoCellTextParser implements LessonTextParser {
 
     // 1. тип занятия по признаку в скобках; незнакомые скобки остаются в предмете
     const types = new Set<LessonType>();
+    const rawMarkers: string[] = [];
     rest = rest.replace(PARENTHESES, (whole: string, inner: string) => {
       const named = typesOf(inner);
       if (named.size === 0) return whole;
+      rawMarkers.push(inner.trim());
       named.forEach((t) => types.add(t));
       return ' ';
     });
@@ -161,6 +163,7 @@ export class SpoCellTextParser implements LessonTextParser {
     return {
       kind: 'content',
       lessonType,
+      rawLessonType: rawMarkers.length === 0 ? null : rawMarkers.join(', '),
       subject,
       teacher: teachers.length === 0 ? null : teachers.join(', '),
       room: room === null || room === '' ? null : room,

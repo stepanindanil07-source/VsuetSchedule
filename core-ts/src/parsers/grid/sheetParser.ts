@@ -576,6 +576,7 @@ export class GridSheetParser {
       subgroup,
       subject: content.subject,
       lessonType: content.lessonType as LessonType,
+      rawLessonType: content.rawLessonType,
       teacher: content.teacher,
       room: content.room,
       rawText: text,

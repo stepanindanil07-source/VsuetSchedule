@@ -4,6 +4,8 @@ import type { LessonType } from '../../model/types';
 export interface CellContent {
   kind: 'content';
   lessonType: LessonType;
+  /** Исходное обозначение типа занятия или null. */
+  rawLessonType: string | null;
   subject: string;
   /** Преподаватели через «, » или null. */
   teacher: string | null;

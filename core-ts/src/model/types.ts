@@ -40,6 +40,8 @@ export interface ParsedEntry {
   subgroup: number | null;
   subject: string;
   lessonType: LessonType;
+  /** Исходное обозначение типа занятия как в файле («пр.», «(лаб.)», «экз.») или null, если его не было. */
+  rawLessonType: string | null;
   /** Преподаватели через «, » или null. */
   teacher: string | null;
   /** Аудитории через «, » или null. */
