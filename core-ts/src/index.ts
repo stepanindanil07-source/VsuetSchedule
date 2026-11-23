@@ -13,3 +13,4 @@ export { buildCalendar, weekTypeOn, validatePeriod, type AcademicCalendar, type 
 export * from './dataset/types';
 export { buildDataset, type BuildInput } from './dataset/builder';
 export { publishDataset, type DatasetStore, type PublishOutcome } from './sync/publish';
+export { DATASET_DB_DDL, APP_DB_DDL, datasetInserts, LOCAL_DB_SCHEMA_VERSION } from './storage/schema';

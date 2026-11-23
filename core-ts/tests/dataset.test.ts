@@ -1,6 +1,6 @@
 import { buildDataset } from '../src/dataset/builder';
 import { publishDataset, type DatasetStore } from '../src/sync/publish';
-import type { Dataset, SourceImport } from '../src/dataset/types';
+import type { Dataset, PreviousDataset, SourceImport } from '../src/dataset/types';
 import { AUTUMN_2026, SOURCES } from '../src/sources/registry';
 import { allImports, baseInput, importSource, sha256 } from './datasetSupport';
 
@@ -252,6 +252,15 @@ describe('публикация: прежний рабочий набор ост�
     current(): Dataset | null {
       return this.dataset;
     }
+    previous(): PreviousDataset | null {
+      const d = this.dataset;
+      if (d === null) return null;
+      return {
+        datasetVersion: d.manifest.datasetVersion,
+        contentHash: d.manifest.contentHash,
+        entriesBySource: Object.fromEntries(d.manifest.sources.map((s) => [s.sourceId, s.entries])),
+      };
+    }
     replace(d: Dataset): void {
       this.dataset = d;
       this.replaced++;
@@ -259,51 +268,51 @@ describe('публикация: прежний рабочий набор ост�
   }
   const { previous: _p, ...noPrevious } = baseInput();
 
-  it('первая публикация сохраняет набор версии 1', () => {
+  it('первая публикация сохраняет набор версии 1', async () => {
     const store = new MemoryStore();
-    const outcome = publishDataset(noPrevious, store);
+    const outcome = await publishDataset(noPrevious, store);
     expect(outcome.status).toBe('PUBLISHED');
     expect(store.current()?.manifest.datasetVersion).toBe(1);
   });
 
-  it('ошибка источника: набор не заменяется, остаётся версия 1', () => {
+  it('ошибка источника: набор не заменяется, остаётся версия 1', async () => {
     const store = new MemoryStore();
-    publishDataset(noPrevious, store);
+    await publishDataset(noPrevious, store);
     const before = store.current();
-    const outcome = publishDataset({ ...noPrevious, imports: replaceImport('eht', failed('eht')) }, store);
+    const outcome = await publishDataset({ ...noPrevious, imports: replaceImport('eht', failed('eht')) }, store);
     expect(outcome).toMatchObject({ status: 'REJECTED', keptDatasetVersion: 1 });
     expect(store.current()).toBe(before);
     expect(store.replaced).toBe(1);
   });
 
-  it('то же содержимое: ничего не заменяется', () => {
+  it('то же содержимое: ничего не заменяется', async () => {
     const store = new MemoryStore();
-    publishDataset(noPrevious, store);
-    const outcome = publishDataset(noPrevious, store);
+    await publishDataset(noPrevious, store);
+    const outcome = await publishDataset(noPrevious, store);
     expect(outcome).toMatchObject({ status: 'UNCHANGED', datasetVersion: 1 });
     expect(store.replaced).toBe(1);
   });
 
-  it('изменённое содержимое заменяет набор целиком и поднимает версию', () => {
+  it('изменённое содержимое заменяет набор целиком и поднимает версию', async () => {
     const store = new MemoryStore();
-    publishDataset(noPrevious, store);
+    await publishDataset(noPrevious, store);
     const imports = allImports();
     const tf = imports.find((i) => i.source.id === 'tf')!;
     if (tf.outcome.status !== 'OK') throw new Error('нужен успешный разбор');
     tf.outcome.parsed.entries[0] = { ...tf.outcome.parsed.entries[0], room: '999' };
-    const outcome = publishDataset({ ...noPrevious, imports }, store);
+    const outcome = await publishDataset({ ...noPrevious, imports }, store);
     expect(outcome.status).toBe('PUBLISHED');
     expect(store.current()?.manifest.datasetVersion).toBe(2);
   });
 
-  it('падение числа занятий относительно ТЕКУЩЕГО опубликованного набора отклоняется', () => {
+  it('падение числа занятий относительно ТЕКУЩЕГО опубликованного набора отклоняется', async () => {
     const store = new MemoryStore();
-    publishDataset(noPrevious, store);
+    await publishDataset(noPrevious, store);
     const imports = allImports();
     const uits = imports.find((i) => i.source.id === 'uits')!;
     if (uits.outcome.status !== 'OK') throw new Error('нужен успешный разбор');
     uits.outcome.parsed.entries = uits.outcome.parsed.entries.slice(0, 10);
-    const outcome = publishDataset({ ...noPrevious, imports }, store);
+    const outcome = await publishDataset({ ...noPrevious, imports }, store);
     expect(outcome).toMatchObject({ status: 'REJECTED', keptDatasetVersion: 1 });
     expect(store.current()?.manifest.datasetVersion).toBe(1);
   });
