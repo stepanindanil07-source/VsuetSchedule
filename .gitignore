@@ -35,3 +35,6 @@ build/
 ### Deployment ###
 .env
 /backups/
+
+### Node (core-ts) ###
+node_modules/
