@@ -56,6 +56,17 @@ class SeedMigrationsTest {
     }
 
     @Test
+    void autumn2026StartsOnTheFirstOfSeptemberAndEndsOnTheLastDayOfTheYear() {
+        Map<String, Object> period = jdbc.sql("SELECT start_date, end_date, first_week_start, first_week_type FROM academic_period "
+                + "WHERE year_from = 2026 AND term = 'AUTUMN'").query().singleRow();
+
+        assertThat(period.get("start_date").toString()).isEqualTo("2026-09-01");
+        assertThat(period.get("end_date").toString()).isEqualTo("2026-12-31");
+        assertThat(period.get("first_week_start").toString()).isEqualTo("2026-08-31");
+        assertThat(period.get("first_week_type")).isEqualTo("NUMERATOR");
+    }
+
+    @Test
     void correspondenceSourceIsPinnedToAutumn2026AndKnowsItIsTheFifthCourse() {
         Map<String, Object> zao = jdbc.sql("""
                 SELECT s.url, s.default_course, p.year_from, p.term
