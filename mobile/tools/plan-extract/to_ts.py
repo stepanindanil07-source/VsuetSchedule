@@ -5,6 +5,18 @@ import sys
 
 src, dst = sys.argv[1], sys.argv[2]
 d = json.load(open(src))
+import math
+
+W0, H0 = d['size']
+_t = math.radians(d['theta'])
+_c, _s = math.cos(_t), math.sin(_t)
+
+
+def to_original(x, y):
+    """Координаты выпрямленного плана -> координаты исходного снимка (по ним заданы вырезы и границы)."""
+    dx, dy = x - W0 / 2, y - H0 / 2
+    return _c * dx - _s * dy + W0 / 2, _s * dx + _c * dy + H0 / 2
+
 
 # Помещения: безымянные мелкие обрезки между перегородками отбрасываются
 rooms = []
@@ -15,40 +27,45 @@ for r in d['rooms']:
     if not r['ref'] and not r.get('title') and (r['area'] < 1200 or min(w, h) < 14):
         continue
     cx, cy = sum(xs) / len(xs), sum(ys) / len(ys)
-    room = {'ref': r['ref'], 'polygon': [[int(x), int(y)] for x, y in r['polygon']]}
+    room = {'ref': r['ref'], 'polygon': [[round(x), round(y)] for x, y in r['polygon']]}
     if r.get('title'):
         room['title'] = r['title']
     # северо-восточное крыло: на первом этаже в него нет прохода, попасть можно только со второго этажа
-    if cx > 1190 and cy < 640:
+    ox, oy = to_original(cx, cy)
+    if ox > 1190 and oy < 640:
         room['access'] = 'UPPER_FLOOR'
     rooms.append(room)
 
 cell = d['cell']
 # оси коридоров, которых не видно по цвету (узкие проходы), добавляются вручную: extra.json -> extraCorridors
-extra = json.load(open(sys.argv[3])) if len(sys.argv) > 3 else {}
+
 cellset = {(c[0] // cell, c[1] // cell): c for c in d['walkable']}
-for line in extra.get('extraCorridors', []):
+for line in d.get('extraCorridors', []):
     for (x0, y0), (x1, y1) in zip(line, line[1:]):
         n = max(1, int(max(abs(x1 - x0), abs(y1 - y0)) / (cell / 2)))
         for i in range(n + 1):
             x, y = x0 + (x1 - x0) * i / n, y0 + (y1 - y0) * i / n
             cellset[(int(x) // cell, int(y) // cell)] = [int(x) // cell * cell + cell // 2, int(y) // cell * cell + cell // 2]
 # северо-восточное крыло отрезано от первого этажа
-cellset = {k: v for k, v in cellset.items() if not (v[0] > 1180 and v[1] < 640)}
+cellset = {k: v for k, v in cellset.items() if not (to_original(*v)[0] > 1180 and to_original(*v)[1] < 640)}
 # только связная часть основной сети (от главного коридора): отдельные пятна (библиотека, двор) в маршрутах не участвуют
 import collections
-seed = min(cellset, key=lambda k: (k[0] * cell - 600) ** 2 + (k[1] * cell - 620) ** 2)
+_seed_xy = (lambda p: p)(__import__('builtins').tuple([_c * (600 - W0 / 2) + _s * (620 - H0 / 2) + W0 / 2, -_s * (600 - W0 / 2) + _c * (620 - H0 / 2) + H0 / 2]))
+seed = min(cellset, key=lambda k: (k[0] * cell - _seed_xy[0]) ** 2 + (k[1] * cell - _seed_xy[1]) ** 2)
 seen, queue = {seed}, collections.deque([seed])
 while queue:
     gx, gy = queue.popleft()
     for dx in (-1, 0, 1):
         for dy in (-1, 0, 1):
             n = (gx + dx, gy + dy)
+            # те же правила, что в приложении: диагональ только если обе соседние по сторонам клетки проходимы
+            if dx != 0 and dy != 0 and ((gx + dx, gy) not in cellset or (gx, gy + dy) not in cellset):
+                continue
             if n in cellset and n not in seen:
                 seen.add(n)
                 queue.append(n)
 cells = [cellset[k] for k in sorted(seen)]
-stairs = [[215, 258], [190, 458], [430, 665], [1150, 685], [1180, 765], [1523, 772], [1755, 703], [1630, 247], [527, 762], [692, 764], [397, 910], [395, 1043]]
+stairs = [[round(x), round(y)] for x, y in d['stairs']]
 
 W, H = d['size']
 plan = {
@@ -58,7 +75,7 @@ plan = {
         'floors': [{
             'id': 'main-1', 'level': 1, 'title': '1 этаж', 'width': W, 'height': H,
             'rooms': rooms, 'corridors': [], 'stairs': stairs,
-            'outline': [[[int(x), int(y)] for x, y in lp] for lp in d['outline']],
+            'outline': [[[round(x), round(y)] for x, y in lp] for lp in d['outline']],
             'walkable': {'cell': d['cell'], 'cells': cells},
         }],
     }],

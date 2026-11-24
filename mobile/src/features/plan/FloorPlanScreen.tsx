@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { PanResponder, StyleSheet, Text, View, type GestureResponderEvent, type HostInstance, type LayoutChangeEvent } from 'react-native';
-import Svg, { Circle, G, Path, Polygon, Polyline, Text as SvgText } from 'react-native-svg';
+import Svg, { G, Path, Polygon, Polyline, Text as SvgText } from 'react-native-svg';
 import { ACTIVE_PLAN } from '../../plan/activePlan';
 import { centroid, findRooms, pointInPolygon } from '../../plan/rooms';
 import { buildGraph, routeBetween, type Route } from '../../plan/routing';
@@ -205,7 +205,8 @@ export function FloorPlanScreen({ roomRef, plan = ACTIVE_PLAN }: { roomRef: stri
                 );
               })}
               {floor.stairs.map((s, i) => (
-                <Circle key={`s${i}`} cx={s[0]} cy={s[1]} r={9} fill="#3B6FE6" />
+                // значок лестницы: ступеньки
+                <Path key={`s${i}`} d={`M${s[0] - 11} ${s[1] + 11}H${s[0] - 4}V${s[1] + 4}H${s[0] + 3}V${s[1] - 3}H${s[0] + 10}V${s[1] - 10}`} stroke="#3B6FE6" strokeWidth={4} fill="none" strokeLinejoin="round" />
               ))}
               {floor.rooms.filter((r) => r.ref !== '' || r.title).map((r, i) => {
                 const [cx, cy] = centroid(r.polygon);
