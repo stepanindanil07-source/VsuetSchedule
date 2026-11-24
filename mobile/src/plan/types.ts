@@ -10,6 +10,11 @@ export interface PlanRoom {
   /** Подпись для помещений без номера («Библиотека»). */
   title?: string;
   polygon: readonly Point[];
+  /**
+   * VIA_UPPER_FLOOR: на этом этаже в помещение нет прохода, попасть можно только со второго этажа (например, северо-восточное крыло
+   * главного корпуса). Маршрут на этом этаже не строится.
+   */
+  access?: 'UPPER_FLOOR';
 }
 
 export interface PlanFloor {
@@ -28,6 +33,10 @@ export interface PlanFloor {
    * и коридоров. Планы университета дают настоящие стены.
    */
   outline?: ReadonlyArray<readonly Point[]>;
+  /**
+   * Проходимые клетки пола (центры квадратов со стороной `cell`). Если заданы, маршрут строится по ним, иначе по осям коридоров.
+   */
+  walkable?: { cell: number; cells: readonly Point[] };
 }
 
 export interface PlanBuilding {

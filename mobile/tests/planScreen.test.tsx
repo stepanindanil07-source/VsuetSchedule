@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react-native';
+import { DEMO_PLAN } from '../src/plan/demoMainFloor1';
 import { FloorPlanScreen } from '../src/features/plan/FloorPlanScreen';
 import { LessonCard } from '../src/features/common/LessonCard';
 import { PlanContext } from '../src/features/common/PlanContext';
@@ -14,19 +15,19 @@ const lesson = (classroom: string | null): DayLesson => ({
 
 describe('экран плана', () => {
   it('найденная аудитория: название и корпус, подпись о демо-данных', async () => {
-    await render(<FloorPlanScreen roomRef="129" />);
+    await render(<FloorPlanScreen plan={DEMO_PLAN} roomRef="129" />);
     expect(screen.getByText('Аудитория 129')).toBeTruthy();
     expect(screen.getByText(/Главный корпус, 1 этаж/)).toBeTruthy();
     expect(screen.getByText(/Демо: схематичный первый этаж/)).toBeTruthy();
   });
 
   it('номер из двух помещений: сообщает, что подсвечены все', async () => {
-    await render(<FloorPlanScreen roomRef="125" />);
+    await render(<FloorPlanScreen plan={DEMO_PLAN} roomRef="125" />);
     expect(screen.getByText(/2 помещения с таким номером/)).toBeTruthy();
   });
 
   it('ненайденная аудитория: понятное сообщение, а не пустой экран', async () => {
-    await render(<FloorPlanScreen roomRef="999" />);
+    await render(<FloorPlanScreen plan={DEMO_PLAN} roomRef="999" />);
     expect(screen.getByText(/пока не размечена на плане/)).toBeTruthy();
   });
 });

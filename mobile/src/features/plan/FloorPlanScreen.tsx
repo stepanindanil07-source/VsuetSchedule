@@ -1,10 +1,10 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { PanResponder, StyleSheet, Text, View, type GestureResponderEvent, type HostInstance, type LayoutChangeEvent } from 'react-native';
-import Svg, { Circle, G, Polygon, Polyline, Text as SvgText } from 'react-native-svg';
-import { DEMO_PLAN } from '../../plan/demoMainFloor1';
+import Svg, { Circle, G, Path, Polygon, Polyline, Text as SvgText } from 'react-native-svg';
+import { ACTIVE_PLAN } from '../../plan/activePlan';
 import { centroid, findRooms, pointInPolygon } from '../../plan/rooms';
 import { buildGraph, routeBetween, type Route } from '../../plan/routing';
-import type { PlanRoom, Point } from '../../plan/types';
+import type { PlanData, PlanRoom, Point } from '../../plan/types';
 import { Banner, Body, Button } from '../common/components';
 import { useTheme } from '../common/theme';
 
@@ -26,19 +26,20 @@ const MAX_SCALE = 6;
  * План этажа: подсветка аудитории из расписания, указание «я здесь» нажатием на комнату и маршрут по коридорам.
  * Масштаб и сдвиг: двумя пальцами и одним, а также кнопками. Данные плана это демонстрационная схема (см. src/plan).
  */
-export function FloorPlanScreen({ roomRef }: { roomRef: string }) {
+export function FloorPlanScreen({ roomRef, plan = ACTIVE_PLAN }: { roomRef: string; plan?: PlanData }) {
   const t = useTheme();
-  const hits = useMemo(() => findRooms(DEMO_PLAN, roomRef), [roomRef]);
+  const hits = useMemo(() => findRooms(plan, roomRef), [plan, roomRef]);
   const hit = hits[0] ?? null;
-  const floor = hit?.floor ?? DEMO_PLAN.buildings[0].floors[0];
+  const floor = hit?.floor ?? plan.buildings[0].floors[0];
   const graph = useMemo(() => buildGraph(floor), [floor]);
 
   const [size, setSize] = useState({ width: 0, height: 0 });
   // границы занятой части плана: пустые края не тратят место на экране
   const bounds = useMemo(() => {
-    const xs = floor.rooms.flatMap((r) => r.polygon.map((p) => p[0]));
-    const ys = floor.rooms.flatMap((r) => r.polygon.map((p) => p[1]));
-    const pad = 60;
+    const shapes = [...floor.rooms.map((r) => r.polygon), ...(floor.outline ?? [])];
+    const xs = shapes.flatMap((poly) => poly.map((p) => p[0]));
+    const ys = shapes.flatMap((poly) => poly.map((p) => p[1]));
+    const pad = 40;
     return { x0: Math.min(...xs) - pad, y0: Math.min(...ys) - pad, x1: Math.max(...xs) + pad, y1: Math.max(...ys) + pad };
   }, [floor]);
   const boundsWidth = bounds.x1 - bounds.x0;
@@ -138,6 +139,15 @@ export function FloorPlanScreen({ roomRef }: { roomRef: string }) {
     setView({ scale, tx: size.width / 2 - cx * scale, ty: size.height / 2 - cy * scale });
   };
 
+  // при открытии из расписания план сразу приближен к нужной аудитории (один раз); «Весь этаж» возвращает общий вид
+  const focused = useRef(false);
+  useEffect(() => {
+    if (focused.current || size.width === 0 || targets.length === 0) return;
+    focused.current = true;
+    centerOnTarget();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [size.width, size.height, targets.length]);
+
   const onLayout = (e: LayoutChangeEvent): void => setSize({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height });
 
   const fontSize = 22;
@@ -155,6 +165,7 @@ export function FloorPlanScreen({ roomRef }: { roomRef: string }) {
       </View>
 
       {hit?.approximate === true && <Banner tone="info">В расписании аудитория «{roomRef}», на плане найдена «{hit.room.ref}». Это вероятное совпадение: проверьте номер на двери.</Banner>}
+      {targets.some((r) => r.access === 'UPPER_FLOOR') && <Banner>На 1 этаже в эту аудиторию прохода нет: попасть можно только со 2 этажа. Маршрут на этом этаже не строится.</Banner>}
       {hit === null && <Banner>Эта аудитория пока не размечена на плане. Размечен только первый этаж главного корпуса (демо).</Banner>}
 
       <View ref={container} onLayout={onLayout} style={[styles.canvas, { borderColor: t.border, backgroundColor: PLAN_BACKGROUND }]} {...responder.panHandlers}>
@@ -163,7 +174,7 @@ export function FloorPlanScreen({ roomRef }: { roomRef: string }) {
             <G transform={`translate(${current.tx} ${current.ty}) scale(${current.scale})`}>
               {/* контур здания: если стен нет в данных, приблизительный: комнаты и коридоры, расширенные сначала цветом стен, затем цветом пола */}
               {floor.outline
-                ? floor.outline.map((o, i) => <Polygon key={`o${i}`} points={o.map((p) => p.join(',')).join(' ')} fill={FLOOR} stroke={WALL} strokeWidth={6} strokeLinejoin="round" />)
+                ? <Path d={floor.outline.map((o) => `M${o.map((p) => p.join(' ')).join('L')}Z`).join('')} fill={FLOOR} fillRule="evenodd" stroke={WALL} strokeWidth={5} strokeLinejoin="round" />
                 : (
                   <>
                     {floor.rooms.map((r, i) => (
@@ -187,16 +198,16 @@ export function FloorPlanScreen({ roomRef }: { roomRef: string }) {
                   <Polygon
                     key={i}
                     points={r.polygon.map((p) => p.join(',')).join(' ')}
-                    fill={isTarget ? '#FFB020' : isStart ? '#5BD38F' : r.ref === '' ? '#E9E3F4' : '#DCE5FA'}
-                    stroke="#8FA3D6"
-                    strokeWidth={1.5}
+                    fill={isTarget ? '#FFB020' : isStart ? '#5BD38F' : r.ref === '' ? '#E3DDF1' : '#D3DEF8'}
+                    stroke="#7F90C0"
+                    strokeWidth={2}
                   />
                 );
               })}
               {floor.stairs.map((s, i) => (
                 <Circle key={`s${i}`} cx={s[0]} cy={s[1]} r={9} fill="#3B6FE6" />
               ))}
-              {floor.rooms.map((r, i) => {
+              {floor.rooms.filter((r) => r.ref !== '' || r.title).map((r, i) => {
                 const [cx, cy] = centroid(r.polygon);
                 return (
                   <SvgText key={`t${i}`} x={cx} y={cy + fontSize / 3} fontSize={fontSize} fill="#26304A" textAnchor="middle" fontWeight="600">
@@ -221,10 +232,12 @@ export function FloorPlanScreen({ roomRef }: { roomRef: string }) {
         {start === null
           ? 'Нажмите на комнату, где вы находитесь, и появится маршрут до аудитории (зелёная это вы, оранжевая цель).'
           : route === null
-            ? `Из ${start.ref} до аудитории маршрут не построен.`
+            ? targets.some((r) => r.access !== undefined) || start.access !== undefined
+              ? 'Маршрут на этом этаже не строится: в северо-восточное крыло можно попасть только со 2 этажа.'
+              : `Из ${start.ref} до аудитории маршрут не построен.`
             : `Маршрут от ${start.ref}. Схематично: масштаба в метрах на плане нет.`}
       </Body>
-      <Text style={{ color: t.muted, fontSize: 11 }}>{DEMO_PLAN.provenance}</Text>
+      <Text style={{ color: t.muted, fontSize: 11 }}>{plan.provenance}</Text>
     </View>
   );
 }

@@ -2,7 +2,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { DayLesson, LessonPhase } from '../../domain/schedule';
 import { lessonTypeLabel } from '../../domain/schedule';
 import { extractRoomRefs, findRooms } from '../../plan/rooms';
-import { DEMO_PLAN } from '../../plan/demoMainFloor1';
+import { ACTIVE_PLAN } from '../../plan/activePlan';
 import { Card } from './components';
 import { usePlanOpener } from './PlanContext';
 import { useTheme } from './theme';
@@ -13,7 +13,7 @@ export function LessonCard({ lesson, phase, showSubgroup }: { lesson: DayLesson;
   const planOpener = usePlanOpener();
   const e = lesson.entry;
   // аудитория, которую можно показать на плане (первая найденная из поля «аудитория»)
-  const planRef = planOpener === null ? null : (extractRoomRefs(e.classroom).find((ref) => findRooms(DEMO_PLAN, ref).length > 0) ?? null);
+  const planRef = planOpener === null ? null : (extractRoomRefs(e.classroom).find((ref) => findRooms(ACTIVE_PLAN, ref).length > 0) ?? null);
   const typeText = lessonTypeLabel(e.lessonType) || (e.rawLessonType ?? '');
   const tags: string[] = [];
   if (typeText) tags.push(typeText);
