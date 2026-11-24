@@ -295,6 +295,21 @@ def main(base_path, reg_path, tiles_dir, out_path):
         if abs(ex.area(lp)) >= 1500 * UP * UP:
             outline.append([[x / UP, y / UP] for x, y in ex.manhattan([list(p) for p in ex.simplify(lp, 2.2 * UP)])])
 
+    # ---- ручные правки после сверки с кадрами: manual.json в tiles_dir, прямоугольники в пикселях кадра
+    manual_path = os.path.join(tiles_dir, 'manual.json')
+    for m in (json.load(open(manual_path)) if os.path.exists(manual_path) else []):
+        g = reg[m['tile']]
+        H_, W_ = np.load(os.path.join(tiles_dir, f"tile{m['tile']}.npy"), mmap_mode='r').shape[:2]
+        x0, y0, x1, y1 = m['rect']
+        pts = [T.apply(g['s'], np.array(g['R']), np.array(g['t']), *T.rot_point(x, y, W_, H_, g['theta'])) for x, y in ((x0, y0), (x1, y0), (x1, y1), (x0, y1))]
+        bx = [p_[0] for p_ in pts]; by = [p_[1] for p_ in pts]
+        new = {'ref': m.get('ref', ''), 'title': m.get('title'), 'polygon': [[round(min(bx), 1), round(min(by), 1)], [round(max(bx), 1), round(min(by), 1)], [round(max(bx), 1), round(max(by), 1)], [round(min(bx), 1), round(max(by), 1)]], 'area': 0}
+        # заменяемые: с тем же номером или названием, а также лежащие внутри новой рамки
+        rooms = [r for r in rooms if not ((new['ref'] and T.norm(r['ref']) == T.norm(new['ref'])) or (new['title'] and r.get('title') == new['title']) or overlap(r['polygon'], new['polygon']) > 0.5)]
+        rooms.append(new)
+    for r in rooms:
+        r['ref'] = T.norm(r['ref'])  # латинские двойники букв -> кириллица, без пробелов, строчные
+
     # ---- ровные стены: близкие координаты сводятся в одну, наложения соседних комнат разрезаются посередине
     straighten(rooms, outline)
 
