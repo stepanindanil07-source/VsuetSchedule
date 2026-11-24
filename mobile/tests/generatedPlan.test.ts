@@ -9,9 +9,10 @@ try {
 } catch {
   plan = null;
 }
-const maybe = plan === null ? describe.skip : describe;
-
-maybe('сгенерированный план первого этажа', () => {
+// describe.skip всё равно выполняет тело блока, поэтому при отсутствии файла блок не объявляется вовсе
+if (plan === null) {
+  it.skip('сгенерированного плана нет (в git не хранится): проверки пропущены', () => undefined);
+} else describe('сгенерированный план первого этажа', () => {
   const floor = plan!.buildings[0].floors[0];
   const graph = buildGraph(floor);
   const room = (ref: string) => findRooms(plan!, ref)[0].room;
