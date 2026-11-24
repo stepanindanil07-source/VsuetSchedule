@@ -1,13 +1,19 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { DayLesson, LessonPhase } from '../../domain/schedule';
 import { lessonTypeLabel } from '../../domain/schedule';
+import { extractRoomRefs, findRooms } from '../../plan/rooms';
+import { DEMO_PLAN } from '../../plan/demoMainFloor1';
 import { Card } from './components';
+import { usePlanOpener } from './PlanContext';
 import { useTheme } from './theme';
 
 /** Карточка занятия: время, предмет, тип, преподаватель, аудитория, подгруппа и неоднозначности. */
 export function LessonCard({ lesson, phase, showSubgroup }: { lesson: DayLesson; phase?: LessonPhase; showSubgroup: boolean }) {
   const t = useTheme();
+  const planOpener = usePlanOpener();
   const e = lesson.entry;
+  // аудитория, которую можно показать на плане (первая найденная из поля «аудитория»)
+  const planRef = planOpener === null ? null : (extractRoomRefs(e.classroom).find((ref) => findRooms(DEMO_PLAN, ref).length > 0) ?? null);
   const typeText = lessonTypeLabel(e.lessonType) || (e.rawLessonType ?? '');
   const tags: string[] = [];
   if (typeText) tags.push(typeText);
@@ -29,6 +35,11 @@ export function LessonCard({ lesson, phase, showSubgroup }: { lesson: DayLesson;
           <Text style={[styles.subject, { color: t.text }]}>{e.subject}</Text>
           {tags.length > 0 && <Text style={{ color: t.muted, fontSize: 13 }}>{tags.join(' · ')}</Text>}
           {place !== '' && <Text style={{ color: t.text, fontSize: 14, marginTop: 2 }}>{place}</Text>}
+          {planRef !== null && planOpener !== null && (
+            <Pressable accessibilityRole="button" onPress={() => planOpener.openPlan(planRef)} style={{ alignSelf: 'flex-start', marginTop: 6 }}>
+              <Text style={{ color: t.primary, fontWeight: '700', fontSize: 14 }}>На плане ›</Text>
+            </Pressable>
+          )}
           {lesson.weekUncertain && <Text style={{ color: t.warningText, fontSize: 12, marginTop: 4 }}>Тип недели неизвестен: занятие бывает не каждую неделю</Text>}
         </View>
       </View>

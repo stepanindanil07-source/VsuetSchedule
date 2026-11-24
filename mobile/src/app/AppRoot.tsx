@@ -11,13 +11,15 @@ import { ScheduleScreen } from '../features/schedule/ScheduleScreen';
 import { DiagnosticsScreen } from '../features/settings/DiagnosticsScreen';
 import { SettingsScreen } from '../features/settings/SettingsScreen';
 import { TodayScreen } from '../features/today/TodayScreen';
+import { FloorPlanScreen } from '../features/plan/FloorPlanScreen';
+import { PlanContext } from '../features/common/PlanContext';
 import { Banner, Body } from '../features/common/components';
 import { StoreProvider, useAppStore, useStoreApi } from '../features/common/StoreContext';
 import { useTheme } from '../features/common/theme';
 import type { AppStore, Services } from '../state/store';
 
 type TabParams = { Today: undefined; Schedule: undefined; Settings: undefined };
-type RootParams = { Tabs: undefined; GroupPicker: undefined; Diagnostics: undefined };
+type RootParams = { Tabs: undefined; GroupPicker: undefined; Diagnostics: undefined; FloorPlan: { roomRef: string } };
 
 const Tabs = createBottomTabNavigator<TabParams>();
 const Stack = createNativeStackNavigator<RootParams>();
@@ -101,13 +103,15 @@ function MainNavigation() {
         <Stack.Screen name="Tabs" component={TabsScreen} options={{ headerShown: false }} />
         <Stack.Screen name="GroupPicker" options={{ title: 'Группа' }} component={GroupPickerRoute} />
         <Stack.Screen name="Diagnostics" options={{ title: 'Диагностика' }} component={DiagnosticsScreen} />
+        <Stack.Screen name="FloorPlan" options={{ title: 'План' }} component={FloorPlanRoute} />
       </Stack.Navigator>
     </NavigationContainer>
   );
 }
 
-function TabsScreen({ navigation }: { navigation: { navigate: (name: keyof RootParams) => void } }) {
+function TabsScreen({ navigation }: { navigation: { navigate: (name: any, params?: any) => void } }) {
   return (
+    <PlanContext.Provider value={{ openPlan: (roomRef) => navigation.navigate('FloorPlan', { roomRef }) }}>
     <Tabs.Navigator screenOptions={{ tabBarLabelStyle: { fontSize: 13, fontWeight: '600' }, tabBarIcon: () => null, tabBarIconStyle: { display: 'none' }, tabBarLabelPosition: 'beside-icon' }}>
       <Tabs.Screen name="Today" options={{ title: 'Сегодня' }} component={TodayScreen} />
       <Tabs.Screen name="Schedule" options={{ title: 'Расписание' }} component={ScheduleScreen} />
@@ -115,7 +119,12 @@ function TabsScreen({ navigation }: { navigation: { navigate: (name: keyof RootP
         {() => <SettingsScreen onChangeGroup={() => navigation.navigate('GroupPicker')} onDiagnostics={() => navigation.navigate('Diagnostics')} />}
       </Tabs.Screen>
     </Tabs.Navigator>
+    </PlanContext.Provider>
   );
+}
+
+function FloorPlanRoute({ route }: { route: { params: { roomRef: string } } }) {
+  return <FloorPlanScreen roomRef={route.params.roomRef} />;
 }
 
 function GroupPickerRoute({ navigation }: { navigation: { goBack: () => void } }) {
