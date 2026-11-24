@@ -210,9 +210,15 @@ export function FloorPlanScreen({ roomRef, plan = ACTIVE_PLAN }: { roomRef: stri
               ))}
               {floor.rooms.filter((r) => r.ref !== '' || r.title).map((r, i) => {
                 const [cx, cy] = centroid(r.polygon);
+                const text = r.ref || (r.title ?? '');
+                const xs = r.polygon.map((p) => p[0]);
+                const ys = r.polygon.map((p) => p[1]);
+                // подпись вписывается в комнату: размер по ширине и высоте, слишком мелкие не рисуются
+                const size = Math.min(fontSize, ((Math.max(...xs) - Math.min(...xs)) * 0.92) / (Math.max(1, text.length) * 0.58), (Math.max(...ys) - Math.min(...ys)) * 0.7);
+                if (size < 9) return null;
                 return (
-                  <SvgText key={`t${i}`} x={cx} y={cy + fontSize / 3} fontSize={fontSize} fill="#26304A" textAnchor="middle" fontWeight="600">
-                    {r.ref || r.title}
+                  <SvgText key={`t${i}`} x={cx} y={cy + size / 3} fontSize={size} fill="#26304A" textAnchor="middle" fontWeight="600">
+                    {text}
                   </SvgText>
                 );
               })}
