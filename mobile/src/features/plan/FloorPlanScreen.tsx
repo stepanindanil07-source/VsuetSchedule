@@ -15,6 +15,11 @@ interface View2D {
 }
 
 const MIN_SCALE_FACTOR = 0.8;
+
+// цвета плана не зависят от темы: комнаты, коридоры и стены читаются одинаково днём и ночью
+const PLAN_BACKGROUND = '#E6EBF4';
+const WALL = '#6F7FA8';
+const FLOOR = '#F7F9FD';
 const MAX_SCALE = 6;
 
 /**
@@ -33,7 +38,7 @@ export function FloorPlanScreen({ roomRef }: { roomRef: string }) {
   const bounds = useMemo(() => {
     const xs = floor.rooms.flatMap((r) => r.polygon.map((p) => p[0]));
     const ys = floor.rooms.flatMap((r) => r.polygon.map((p) => p[1]));
-    const pad = 30;
+    const pad = 60;
     return { x0: Math.min(...xs) - pad, y0: Math.min(...ys) - pad, x1: Math.max(...xs) + pad, y1: Math.max(...ys) + pad };
   }, [floor]);
   const boundsWidth = bounds.x1 - bounds.x0;
@@ -152,10 +157,29 @@ export function FloorPlanScreen({ roomRef }: { roomRef: string }) {
       {hit?.approximate === true && <Banner tone="info">В расписании аудитория «{roomRef}», на плане найдена «{hit.room.ref}». Это вероятное совпадение: проверьте номер на двери.</Banner>}
       {hit === null && <Banner>Эта аудитория пока не размечена на плане. Размечен только первый этаж главного корпуса (демо).</Banner>}
 
-      <View ref={container} onLayout={onLayout} style={[styles.canvas, { borderColor: t.border, backgroundColor: t.card }]} {...responder.panHandlers}>
+      <View ref={container} onLayout={onLayout} style={[styles.canvas, { borderColor: t.border, backgroundColor: PLAN_BACKGROUND }]} {...responder.panHandlers}>
         {size.width > 0 && (
           <Svg width={size.width} height={size.height}>
             <G transform={`translate(${current.tx} ${current.ty}) scale(${current.scale})`}>
+              {/* контур здания: если стен нет в данных, приблизительный: комнаты и коридоры, расширенные сначала цветом стен, затем цветом пола */}
+              {floor.outline
+                ? floor.outline.map((o, i) => <Polygon key={`o${i}`} points={o.map((p) => p.join(',')).join(' ')} fill={FLOOR} stroke={WALL} strokeWidth={6} strokeLinejoin="round" />)
+                : (
+                  <>
+                    {floor.rooms.map((r, i) => (
+                      <Polygon key={`w${i}`} points={r.polygon.map((p) => p.join(',')).join(' ')} fill={WALL} stroke={WALL} strokeWidth={46} strokeLinejoin="round" />
+                    ))}
+                    {floor.corridors.map((c, i) => (
+                      <Polyline key={`wc${i}`} points={c.map((p) => p.join(',')).join(' ')} stroke={WALL} strokeWidth={96} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                    ))}
+                    {floor.rooms.map((r, i) => (
+                      <Polygon key={`f${i}`} points={r.polygon.map((p) => p.join(',')).join(' ')} fill={FLOOR} stroke={FLOOR} strokeWidth={36} strokeLinejoin="round" />
+                    ))}
+                    {floor.corridors.map((c, i) => (
+                      <Polyline key={`fc${i}`} points={c.map((p) => p.join(',')).join(' ')} stroke={FLOOR} strokeWidth={86} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                    ))}
+                  </>
+                )}
               {floor.rooms.map((r, i) => {
                 const isTarget = targets.includes(r);
                 const isStart = r === start;
@@ -169,9 +193,6 @@ export function FloorPlanScreen({ roomRef }: { roomRef: string }) {
                   />
                 );
               })}
-              {floor.corridors.map((c, i) => (
-                <Polyline key={`c${i}`} points={c.map((p) => p.join(',')).join(' ')} stroke="#C9D2EA" strokeWidth={4} strokeDasharray="2 10" fill="none" />
-              ))}
               {floor.stairs.map((s, i) => (
                 <Circle key={`s${i}`} cx={s[0]} cy={s[1]} r={9} fill="#3B6FE6" />
               ))}

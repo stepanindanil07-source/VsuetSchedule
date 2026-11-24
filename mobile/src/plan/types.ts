@@ -23,6 +23,11 @@ export interface PlanFloor {
   /** Оси коридоров: ломаные линии. Концы, лежащие рядом, считаются соединёнными. */
   corridors: ReadonlyArray<readonly Point[]>;
   stairs: readonly Point[];
+  /**
+   * Контуры внешних стен здания на этаже (многоугольники). Если не заданы, экран рисует приблизительный контур вокруг комнат
+   * и коридоров. Планы университета дают настоящие стены.
+   */
+  outline?: ReadonlyArray<readonly Point[]>;
 }
 
 export interface PlanBuilding {
