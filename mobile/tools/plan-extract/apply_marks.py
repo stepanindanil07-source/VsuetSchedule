@@ -4,7 +4,8 @@
 
 Правки задаются файлом JSON в координатах той картинки (пиксели), а `transform` переводит их в координаты плана:
 plan = (x0 + px * k, y0 + py * k). Операции:
-  add      новое помещение: {"ref", "title"?, "rect": [x0, y0, x1, y1]}
+  add      новое помещение: {"ref", "title"?, "rect": [x0, y0, x1, y1]} или "polygon": [[x, y], ...]
+  squeeze  сжать помещения внутри "rect" по горизонтали к новому правому краю "to_right"
   set      изменить помещение, в котором лежит точка "at": ref, title, left, right, top, bottom
   remove   убрать помещение, в котором лежит точка "at"
   outline  заменить в контуре цепочку вершин от ближайшей к "from" до ближайшей к "to" (включительно) на "points"
@@ -48,7 +49,7 @@ def main(plan_path, marks_path, out_path):
     Y = lambda v: tf['y0'] + v * tf['k']
     P = lambda p: [round(X(p[0]), 1), round(Y(p[1]), 1)]
     rooms = plan['rooms']
-    walls = []
+    walls = list(plan.get('walls', []))  # стены прошлых раундов правок сохраняются
 
     def find(at):
         x, y = X(at[0]), Y(at[1])
@@ -60,8 +61,24 @@ def main(plan_path, marks_path, out_path):
     for op in marks['ops']:
         kind = op['op']
         if kind == 'add':
-            x0, y0, x1, y1 = op['rect']
-            rooms.append({'ref': op.get('ref', ''), 'title': op.get('title'), 'polygon': rect([X(x0), Y(y0), X(x1), Y(y1)]), 'area': 9999})
+            if 'polygon' in op:
+                polygon = [P(p) for p in op['polygon']]
+            else:
+                x0, y0, x1, y1 = op['rect']
+                polygon = rect([X(x0), Y(y0), X(x1), Y(y1)])
+            rooms.append({'ref': op.get('ref', ''), 'title': op.get('title'), 'polygon': polygon, 'area': 9999})
+        elif kind == 'squeeze':
+            # помещения внутри рамки сжимаются по горизонтали к новому правому краю (освобождают место в конце ряда)
+            rx0, ry0, rx1, ry1 = X(op['rect'][0]), Y(op['rect'][1]), X(op['rect'][2]), Y(op['rect'][3])
+            end = X(op['to_right'])
+            inside = [r for r in rooms if bbox(r['polygon'])[0] >= rx0 and bbox(r['polygon'])[2] <= rx1 and bbox(r['polygon'])[1] >= ry0 and bbox(r['polygon'])[3] <= ry1]
+            if not inside:
+                raise SystemExit(f'в рамке {op["rect"]} нет помещений')
+            left = min(bbox(r['polygon'])[0] for r in inside)
+            right = max(bbox(r['polygon'])[2] for r in inside)
+            for r in inside:
+                r['polygon'] = [[round(left + (x - left) * (end - left) / (right - left), 1), y] for x, y in r['polygon']]
+            print('сжато помещений:', len(inside))
         elif kind == 'set':
             r = find(op['at'])
             b = bbox(r['polygon'])
@@ -125,6 +142,7 @@ def main(plan_path, marks_path, out_path):
                 walk.append(c)
     plan['walkable'] = walk
     plan['walls'] = walls
+    plan['extraCorridors'] = []  # проходы теперь целиком из геометрии: прежние дорисовки не должны проходить сквозь стены
     json.dump(plan, open(out_path, 'w'), ensure_ascii=False)
     print('правок', len(marks['ops']), 'помещений', len(rooms), 'стен', len(walls), 'проходимых клеток', len(walk))
 

@@ -216,18 +216,22 @@ export function FloorPlanScreen({ roomRef, plan = ACTIVE_PLAN }: { roomRef: stri
                 const xs = r.polygon.map((p) => p[0]);
                 const ys = r.polygon.map((p) => p[1]);
                 const width = Math.max(...xs) - Math.min(...xs);
+                const height = Math.max(...ys) - Math.min(...ys);
                 // подпись вписывается в комнату: размер по ширине и высоте, слишком мелкие не рисуются
-                const fit = (value: string): number => Math.min(fontSize, (width * 0.92) / (Math.max(1, value.length) * 0.58), (Math.max(...ys) - Math.min(...ys)) * 0.7);
-                // номер с названием («101 Медпункт»), если помещается; иначе только номер
+                const fit = (lines: string[]): number =>
+                  Math.min(fontSize, (width * 0.92) / (Math.max(1, ...lines.map((l) => l.length)) * 0.58), (height * 0.8) / (lines.length * 1.15));
+                // номер с названием («101 Медпункт»), если помещается; название из двух слов в узкой комнате переносится
                 const full = r.ref && r.title ? `${r.ref} ${r.title}` : r.ref || (r.title ?? '');
-                const text = r.ref && r.title && fit(full) < 9 ? r.ref : full;
-                const size = fit(text);
-                if (size < 9) return null;
-                return (
-                  <SvgText key={`t${i}`} x={cx} y={cy + size / 3} fontSize={size} fill="#26304A" textAnchor="middle" fontWeight="600">
-                    {text}
+                const words = full.split(' ');
+                let lines = words.length === 2 && fit(words) > fit([full]) ? words : [full];
+                if (r.ref && r.title && fit(lines) < 9) lines = [r.ref];
+                const size = fit(lines);
+                if (size < 8) return null;
+                return lines.map((line, n) => (
+                  <SvgText key={`t${i}-${n}`} x={cx} y={cy + size / 3 + (n - (lines.length - 1) / 2) * size * 1.15} fontSize={size} fill="#26304A" textAnchor="middle" fontWeight="600">
+                    {line}
                   </SvgText>
-                );
+                ));
               })}
               {route && <Polyline points={route.points.map((p) => p.join(',')).join(' ')} stroke="#E5391F" strokeWidth={7} strokeLinejoin="round" strokeLinecap="round" fill="none" />}
             </G>

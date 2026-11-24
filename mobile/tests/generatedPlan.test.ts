@@ -43,4 +43,20 @@ if (plan === null) {
     const unreachable = floor.rooms.filter((r) => r.ref !== '' && r.access === undefined && routeBetween(floor, room('129'), r, graph) === null).map((r) => r.ref);
     expect(unreachable).toEqual([]);
   });
+
+  it('маршрут в правое крыло идёт в обход стены у мужского туалета, не сквозь неё', () => {
+    const walls = floor.walls ?? [];
+    expect(walls.length).toBeGreaterThan(0);
+    type P = readonly [number, number];
+    const side = (a: P, b: P, c: P) => Math.sign((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]));
+    const crosses = (a: P, b: P, c: P, d: P) => side(a, b, c) * side(a, b, d) < 0 && side(c, d, a) * side(c, d, b) < 0;
+    for (const [from, to] of [['124', '130'], ['126', '135'], ['102', '151'], ['111', '140'], ['124', '12']] as const) {
+      const route = routeBetween(floor, room(from), room(to), graph);
+      expect(route).not.toBeNull();
+      const path = route!.points.slice(1, -1); // без отрезков от центров комнат до дверей
+      for (let i = 1; i < path.length; i++) {
+        for (const [c, d] of walls) expect({ from, to, through: crosses(path[i - 1], path[i], c, d) }).toEqual({ from, to, through: false });
+      }
+    }
+  });
 });
