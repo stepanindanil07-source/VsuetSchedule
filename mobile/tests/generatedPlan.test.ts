@@ -17,10 +17,14 @@ if (plan === null) {
   const graph = buildGraph(floor);
   const room = (ref: string) => findRooms(plan!, ref)[0].room;
 
-  it('есть контур здания и помещения без номеров', () => {
+  it('есть контур здания и пронумерованные помещения', () => {
     expect(floor.outline!.length).toBeGreaterThan(0);
-    expect(floor.rooms.filter((r) => r.ref === '' && !r.title).length).toBeGreaterThan(5);
-    expect(floor.rooms.filter((r) => r.ref !== '').length).toBeGreaterThan(55);
+    expect(floor.rooms.filter((r) => r.ref !== '').length).toBeGreaterThan(75);
+  });
+
+  it('правки владельца проекта: 1б, медпункт 101, 128, 138 и 140', () => {
+    for (const ref of ['1а', '1б', '101', '128', '138', '140']) expect(findRooms(plan!, ref).length).toBeGreaterThan(0);
+    expect(findRooms(plan!, '101')[0].room.title).toBe('Медпункт');
   });
 
   it('северо-восточное крыло отмечено как доступное только со 2 этажа', () => {

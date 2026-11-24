@@ -37,6 +37,8 @@ export interface PlanFloor {
    * Проходимые клетки пола (центры квадратов со стороной `cell`). Если заданы, маршрут строится по ним, иначе по осям коридоров.
    */
   walkable?: { cell: number; cells: readonly Point[] };
+  /** Внутренние стены без двери (отрезки): рисуются как стены; в проходимых клетках у них пробелы. */
+  walls?: ReadonlyArray<readonly [Point, Point]>;
 }
 
 export interface PlanBuilding {

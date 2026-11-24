@@ -77,6 +77,7 @@ plan = {
             'rooms': rooms, 'corridors': [], 'stairs': stairs,
             'outline': [[[round(x), round(y)] for x, y in lp] for lp in d['outline']],
             'walkable': {'cell': d['cell'], 'cells': cells},
+            'walls': [[[round(x), round(y)] for x, y in seg] for seg in d.get('walls', [])],
         }],
     }],
 }

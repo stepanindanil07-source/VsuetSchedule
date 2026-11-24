@@ -204,17 +204,24 @@ export function FloorPlanScreen({ roomRef, plan = ACTIVE_PLAN }: { roomRef: stri
                   />
                 );
               })}
+              {floor.walls?.map(([a, b], i) => (
+                <Polyline key={`iw${i}`} points={`${a.join(',')} ${b.join(',')}`} stroke={WALL} strokeWidth={5} strokeLinecap="square" fill="none" />
+              ))}
               {floor.stairs.map((s, i) => (
                 // значок лестницы: ступеньки
                 <Path key={`s${i}`} d={`M${s[0] - 11} ${s[1] + 11}H${s[0] - 4}V${s[1] + 4}H${s[0] + 3}V${s[1] - 3}H${s[0] + 10}V${s[1] - 10}`} stroke="#3B6FE6" strokeWidth={4} fill="none" strokeLinejoin="round" />
               ))}
               {floor.rooms.filter((r) => r.ref !== '' || r.title).map((r, i) => {
                 const [cx, cy] = centroid(r.polygon);
-                const text = r.ref || (r.title ?? '');
                 const xs = r.polygon.map((p) => p[0]);
                 const ys = r.polygon.map((p) => p[1]);
+                const width = Math.max(...xs) - Math.min(...xs);
                 // подпись вписывается в комнату: размер по ширине и высоте, слишком мелкие не рисуются
-                const size = Math.min(fontSize, ((Math.max(...xs) - Math.min(...xs)) * 0.92) / (Math.max(1, text.length) * 0.58), (Math.max(...ys) - Math.min(...ys)) * 0.7);
+                const fit = (value: string): number => Math.min(fontSize, (width * 0.92) / (Math.max(1, value.length) * 0.58), (Math.max(...ys) - Math.min(...ys)) * 0.7);
+                // номер с названием («101 Медпункт»), если помещается; иначе только номер
+                const full = r.ref && r.title ? `${r.ref} ${r.title}` : r.ref || (r.title ?? '');
+                const text = r.ref && r.title && fit(full) < 9 ? r.ref : full;
+                const size = fit(text);
                 if (size < 9) return null;
                 return (
                   <SvgText key={`t${i}`} x={cx} y={cy + size / 3} fontSize={size} fill="#26304A" textAnchor="middle" fontWeight="600">
