@@ -24,7 +24,7 @@ const MAX_SCALE = 6;
 
 /**
  * План этажа: подсветка аудитории из расписания, указание «я здесь» нажатием на комнату и маршрут по коридорам.
- * Масштаб и сдвиг: двумя пальцами и одним, а также кнопками. Данные плана это демонстрационная схема (см. src/plan).
+ * Масштаб и сдвиг: двумя пальцами и одним, а также кнопками. Данные плана берутся из src/plan/activePlan.ts.
  */
 export function FloorPlanScreen({ roomRef, plan = ACTIVE_PLAN }: { roomRef: string; plan?: PlanData }) {
   const t = useTheme();
@@ -166,7 +166,7 @@ export function FloorPlanScreen({ roomRef, plan = ACTIVE_PLAN }: { roomRef: stri
 
       {hit?.approximate === true && <Banner tone="info">В расписании аудитория «{roomRef}», на плане найдена «{hit.room.ref}». Это вероятное совпадение: проверьте номер на двери.</Banner>}
       {targets.some((r) => r.access === 'UPPER_FLOOR') && <Banner>На 1 этаже в эту аудиторию прохода нет: попасть можно только со 2 этажа. Маршрут на этом этаже не строится.</Banner>}
-      {hit === null && <Banner>Эта аудитория пока не размечена на плане. Размечен только первый этаж главного корпуса (демо).</Banner>}
+      {hit === null && <Banner>Эта аудитория пока не размечена на плане. Сейчас размечен только первый этаж главного корпуса.</Banner>}
 
       <View ref={container} onLayout={onLayout} style={[styles.canvas, { borderColor: t.border, backgroundColor: PLAN_BACKGROUND }]} {...responder.panHandlers}>
         {size.width > 0 && (

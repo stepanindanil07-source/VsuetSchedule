@@ -2,17 +2,17 @@ import { findRooms, pointInPolygon } from '../src/plan/rooms';
 import { buildGraph, routeBetween } from '../src/plan/routing';
 import type { PlanData } from '../src/plan/types';
 
-/** План, сгенерированный из снимка (в git не хранится): тесты выполняются, только если файл есть рядом. */
+/** Эталон плана (в git не хранится): проверки выполняются, только если файл есть рядом. */
 let plan: PlanData | null = null;
 try {
-  plan = (require('../src/plan/generated/mainFloor1') as { GENERATED_PLAN: PlanData }).GENERATED_PLAN;
+  plan = (require('../src/plan/etalon/mainFloor1') as { ETALON_PLAN: PlanData }).ETALON_PLAN;
 } catch {
   plan = null;
 }
 // describe.skip всё равно выполняет тело блока, поэтому при отсутствии файла блок не объявляется вовсе
 if (plan === null) {
-  it.skip('сгенерированного плана нет (в git не хранится): проверки пропущены', () => undefined);
-} else describe('сгенерированный план первого этажа', () => {
+  it.skip('эталона плана нет (в git не хранится): проверки пропущены', () => undefined);
+} else describe('эталон плана первого этажа', () => {
   const floor = plan!.buildings[0].floors[0];
   const graph = buildGraph(floor);
   const room = (ref: string) => findRooms(plan!, ref)[0].room;
