@@ -1,4 +1,4 @@
-import { findRooms } from '../src/plan/rooms';
+import { findRooms, pointInPolygon } from '../src/plan/rooms';
 import { buildGraph, routeBetween } from '../src/plan/routing';
 import type { PlanData } from '../src/plan/types';
 
@@ -58,5 +58,47 @@ if (plan === null) {
         for (const [c, d] of walls) expect({ from, to, through: crosses(path[i - 1], path[i], c, d) }).toEqual({ from, to, through: false });
       }
     }
+  });
+
+  it('значки лестниц не заходят на помещения и стены', () => {
+    const half = 9;
+    const overlaps = floor.stairs.flatMap(([x, y]) => {
+      const rooms = floor.rooms.filter((r) => {
+        const xs = r.polygon.map((p) => p[0]);
+        const ys = r.polygon.map((p) => p[1]);
+        return x + half > Math.min(...xs) && x - half < Math.max(...xs) && y + half > Math.min(...ys) && y - half < Math.max(...ys);
+      });
+      const walls = (floor.walls ?? []).filter(([a, b]) => x + half > Math.min(a[0], b[0]) && x - half < Math.max(a[0], b[0]) && y + half > Math.min(a[1], b[1]) && y - half < Math.max(a[1], b[1]));
+      return rooms.length + walls.length > 0 ? [{ x, y, rooms: rooms.map((r) => r.ref || r.title), walls: walls.length }] : [];
+    });
+    expect(overlaps).toEqual([]);
+  });
+
+  it('помещения не накладываются друг на друга', () => {
+    const boxes = floor.rooms.map((r) => {
+      const xs = r.polygon.map((p) => p[0]);
+      const ys = r.polygon.map((p) => p[1]);
+      return { polygon: r.polygon, name: r.ref || r.title || '(без номера)', x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) };
+    });
+    const clashes: string[] = [];
+    for (let i = 0; i < boxes.length; i++) {
+      for (let j = i + 1; j < boxes.length; j++) {
+        const a = boxes[i];
+        const b = boxes[j];
+        const w = Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0);
+        const h = Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0);
+        // касание стенами (несколько единиц) допустимо, наложение площадью нет
+        if (w <= 4 || h <= 4) continue;
+        // рамки пересекаются; у непрямоугольных помещений проверяем сами фигуры точками внутри пересечения
+        let shared = 0;
+        for (let x = Math.max(a.x0, b.x0) + 2.5; x < Math.min(a.x1, b.x1) - 2; x += 3) {
+          for (let y = Math.max(a.y0, b.y0) + 2.5; y < Math.min(a.y1, b.y1) - 2; y += 3) {
+            if (pointInPolygon([x, y], a.polygon) && pointInPolygon([x, y], b.polygon)) shared++;
+          }
+        }
+        if (shared > 0) clashes.push(`${a.name} × ${b.name} у ${Math.max(a.x0, b.x0)},${Math.max(a.y0, b.y0)}`);
+      }
+    }
+    expect(clashes).toEqual([]);
   });
 });

@@ -208,8 +208,8 @@ export function FloorPlanScreen({ roomRef, plan = ACTIVE_PLAN }: { roomRef: stri
                 <Polyline key={`iw${i}`} points={`${a.join(',')} ${b.join(',')}`} stroke={WALL} strokeWidth={5} strokeLinecap="square" fill="none" />
               ))}
               {floor.stairs.map((s, i) => (
-                // значок лестницы: ступеньки
-                <Path key={`s${i}`} d={`M${s[0] - 11} ${s[1] + 11}H${s[0] - 4}V${s[1] + 4}H${s[0] + 3}V${s[1] - 3}H${s[0] + 10}V${s[1] - 10}`} stroke="#3B6FE6" strokeWidth={4} fill="none" strokeLinejoin="round" />
+                // значок лестницы: ступеньки в квадрате 18×18, чтобы помещался в узкие ниши
+                <Path key={`s${i}`} d={`M${s[0] - 9} ${s[1] + 9}H${s[0] - 3}V${s[1] + 3}H${s[0] + 3}V${s[1] - 3}H${s[0] + 9}V${s[1] - 9}`} stroke="#3B6FE6" strokeWidth={3.5} fill="none" strokeLinejoin="round" />
               ))}
               {floor.rooms.filter((r) => r.ref !== '' || r.title).map((r, i) => {
                 const [cx, cy] = centroid(r.polygon);
