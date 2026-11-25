@@ -2,9 +2,10 @@
 """
 Картинка этажа в том же виде, что в приложении, для сверки и пометок (PNG, macOS: qlmanage и sips).
 
-Запуск: render_floor.py floor.json out.png [--ghost other_floor.json] [--ref reference_floor.json]
-  --ghost  бледным пунктиром показать контур другого этажа (ориентир)
-  --ref    взять охват картинки у этого этажа, чтобы разные этажи были в одном масштабе и положении
+Запуск: render_floor.py floor.json out.png [--context context.json]
+  --context  серые контуры здания и соседних построек ({"polygons": [...]}): рисуются под этажом и задают общий охват, поэтому
+             все этажи получаются в одном масштабе и положении
+Помещения без номера и названия рисуются серыми (на этаже о них нет данных).
 """
 import importlib.util
 import json
@@ -19,6 +20,8 @@ ex = importlib.util.module_from_spec(spec_)
 spec_.loader.exec_module(ex)
 
 SIDE = 4000
+GRAY_FILL = '#D6D8DE'
+GRAY_LINE = '#BCC0CB'
 
 
 def write_png(path, rgb):
@@ -62,19 +65,24 @@ def main(argv):
     src, dst = argv[0], argv[1]
     opts = dict(zip(argv[2::2], argv[3::2]))
     f = json.load(open(src))
-    ghost = json.load(open(opts['--ghost'])) if '--ghost' in opts else None
-    frame = [f] + [json.load(open(opts[k])) for k in ('--ref', '--ghost') if k in opts]
-    x0, y0, x1, y1 = bounds(frame)
+    context = json.load(open(opts['--context']))['polygons'] if '--context' in opts else []
+    x0, y0, x1, y1 = bounds([f] if not context else [{'rooms': [], 'outline': context}])
     W, H = x1 - x0, y1 - y0
     svg = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{x0} {y0} {W} {W}" width="{SIDE}" height="{SIDE}"><rect x="{x0}" y="{y0}" width="{W}" height="{W}" fill="#E6EBF4"/>']
-    if ghost:
-        for lp in ghost.get('outline', []):
-            svg.append(f'<path d="{path_of(lp)}" fill="none" stroke="#B4BDD4" stroke-width="2" stroke-dasharray="7 6"/>')
-    for lp in f.get('outline', []):
-        svg.append(f'<path d="{path_of(lp)}" fill="#F7F9FD" stroke="#6F7FA8" stroke-width="3.5" stroke-linejoin="round"/>')
+    for lp in context:
+        svg.append(f'<path d="{path_of(lp)}" fill="{GRAY_FILL}" stroke="{GRAY_LINE}" stroke-width="3" stroke-linejoin="round"/>')
+    # все контуры этажа одним путём с чётно-нечётной заливкой (как в приложении): внутренние вырезы остаются вырезами
+    shape = ''.join(path_of(lp) for lp in f.get('outline', []))
+    if shape:
+        svg.append(f'<path d="{shape}" fill="#F7F9FD" fill-rule="evenodd" stroke="#6F7FA8" stroke-width="3.5" stroke-linejoin="round"/>')
     for r in f['rooms']:
-        fill = '#E3DDF1' if not r['ref'] else '#D3DEF8'
-        svg.append(f'<polygon points="{" ".join(f"{x},{y}" for x, y in r["polygon"])}" fill="{fill}" stroke="#7F90C0" stroke-width="1.5"/>')
+        if r['ref']:
+            fill, line = '#D3DEF8', '#7F90C0'
+        elif r.get('title'):
+            fill, line = '#E3DDF1', '#7F90C0'
+        else:
+            fill, line = GRAY_FILL, '#9BA1B3'
+        svg.append(f'<polygon points="{" ".join(f"{x},{y}" for x, y in r["polygon"])}" fill="{fill}" stroke="{line}" stroke-width="1.5"/>')
     for (ax, ay), (bx, by) in f.get('walls', []):
         svg.append(f'<path d="M{ax} {ay}L{bx} {by}" stroke="#6F7FA8" stroke-width="3.5" stroke-linecap="square"/>')
     for sx, sy in f.get('stairs', []):
