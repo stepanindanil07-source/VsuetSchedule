@@ -6,7 +6,7 @@
 Описание (JSON):
   {"id", "level", "title", "size": [W, H], "cell": 12,
    "parts": [ {"name", "scale": s, "offset": [dx, dy],          # план = scale * точка кадра + offset
-               "rooms": [ {"ref"?, "title"?, "rect": [x0, y0, x1, y1] | "polygon": [[x, y], ...]} ],
+               "rooms": [ {"ref"?, "title"?, "office"?, "rect": [x0, y0, x1, y1] | "polygon": [[x, y], ...]} ],
                "outline": [ polygon, ... ], "stairs": [[x, y], ...], "walls": [[[x, y], [x, y]], ...]} ]}
 
 Проходимые клетки: пол внутри контуров без помещений и без клеток у внутренних стен.
@@ -29,6 +29,33 @@ bp = importlib.util.module_from_spec(spec_)
 spec_.loader.exec_module(bp)
 
 
+def drop_specks(cells, cell, smallest=3):
+    """Убирает одиночные клетки в щелях между помещениями: иначе «дверь» комнаты может оказаться в такой щели и маршрут пропадёт."""
+    index = {(x // cell, y // cell): [x, y] for x, y in cells}
+    seen, keep = set(), []
+    for start in index:
+        if start in seen:
+            continue
+        seen.add(start)
+        queue, group = [start], []
+        while queue:
+            gx, gy = queue.pop()
+            group.append((gx, gy))
+            for dx in (-1, 0, 1):
+                for dy in (-1, 0, 1):
+                    n = (gx + dx, gy + dy)
+                    if n not in index or n in seen:
+                        continue
+                    # те же правила, что в приложении: по диагонали только если обе соседние клетки проходимы
+                    if dx and dy and ((gx + dx, gy) not in index or (gx, gy + dy) not in index):
+                        continue
+                    seen.add(n)
+                    queue.append(n)
+        if len(group) >= smallest:
+            keep += [index[k] for k in group]
+    return sorted(keep, key=lambda c: (c[1], c[0]))
+
+
 def main(spec_path, out_path):
     spec = json.load(open(spec_path))
     W, H = spec['size']
@@ -47,6 +74,8 @@ def main(spec_path, out_path):
             room = {'ref': r.get('ref', ''), 'polygon': [P(p) for p in polygon]}
             if r.get('title'):
                 room['title'] = r['title']
+            if r.get('office'):
+                room['office'] = True  # кабинет без номера: рисуется как аудитория, а не как служебное помещение
             rooms.append(room)
         outline += [[P(p) for p in loop] for loop in part.get('outline', [])]
         stairs += [P(p) for p in part.get('stairs', [])]
@@ -58,7 +87,11 @@ def main(spec_path, out_path):
         floor |= bp.raster_loops([loop], (H, W), 1)
     room_mask = np.zeros_like(floor)
     for r in rooms:
-        room_mask |= bp.ex.erode(bp.raster_loops([r['polygon']], (H, W), 1), 5)
+        shape = bp.raster_loops([r['polygon']], (H, W), 1)
+        # безымянный блок со значком лестницы это лестничная клетка: по нему ходят
+        if not r['ref'] and not r.get('title') and any(0 <= y < H and 0 <= x < W and shape[y, x] for x, y in stairs):
+            continue
+        room_mask |= bp.ex.erode(shape, 5)
     floor &= ~room_mask
 
     def near_wall(c):
@@ -77,6 +110,7 @@ def main(spec_path, out_path):
             if block.mean() > 0.55 and not near_wall(c):
                 cells.append(c)
 
+    cells = drop_specks(cells, cell)
     out = {
         'id': spec['id'], 'level': spec['level'], 'title': spec['title'], 'width': W, 'height': H,
         'rooms': rooms, 'corridors': [], 'stairs': stairs, 'outline': outline,

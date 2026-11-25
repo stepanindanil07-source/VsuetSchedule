@@ -61,6 +61,76 @@ def area_centroid(poly):
     return cx / (3 * a), cy / (3 * a)
 
 
+GLYPH = 0.6  # средняя ширина знака в долях кегля (жирный шрифт)
+
+
+def wrap(text, chars):
+    """Перенос по словам: строки не длиннее chars знаков; None, если какое-то слово длиннее строки."""
+    lines = ['']
+    for word in text.split():
+        if len(word) > chars:
+            return None
+        candidate = (lines[-1] + ' ' + word).strip()
+        if len(candidate) <= chars:
+            lines[-1] = candidate
+        else:
+            lines.append(word)
+    return lines
+
+
+def fit_block(text, width, height, largest, smallest):
+    """Наибольший кегль, при котором текст с переносами помещается в прямоугольник: (кегль, строки) или None."""
+    size = largest
+    while size >= smallest:
+        lines = wrap(text, int(width * 0.94 / (size * GLYPH)))
+        if lines and len(lines) * size * 1.12 <= height * 0.94:
+            return size, lines
+        size -= 0.5
+    return None
+
+
+def label_svg(room):
+    """Подпись помещения: крупный номер и под ним название; в узком высоком помещении название идёт вертикально."""
+    ref, title = room['ref'], room.get('title') or ''
+    if not ref and not title:
+        return []
+    xs = [p[0] for p in room['polygon']]
+    ys = [p[1] for p in room['polygon']]
+    cx, cy = area_centroid(room['polygon'])
+    w_, h_ = max(xs) - min(xs), max(ys) - min(ys)
+
+    def text(x, y, size, value, weight='bold', turn=False):
+        rotate = f' transform="rotate(-90 {x} {y - size / 3})"' if turn else ''
+        return f'<text x="{x}" y="{y}" font-size="{size}" font-weight="{weight}" text-anchor="middle" font-family="Helvetica" fill="#26304A"{rotate}>{value}</text>'
+
+    def block(center_y, size, lines, weight):
+        top = center_y - len(lines) * size * 1.12 / 2
+        return [text(cx, top + size * (0.9 + 1.12 * n), size, line, weight) for n, line in enumerate(lines)]
+
+    if ref and not title:
+        size = max(7, min(20, w_ * 0.92 / (len(ref) * 0.58), h_ * 0.7))
+        return [text(cx, cy + size / 3, size, ref)]
+    if title and not ref:
+        largest = 20 if w_ * h_ > 20000 else 14  # крупно только в больших залах
+        flat = fit_block(title, w_, h_, largest, 8)
+        # вертикально только там, где в строку не помещается читаемо
+        upright = fit_block(title, h_, w_, largest, 8) if h_ > w_ * 1.3 and (not flat or flat[0] < 9) else None
+        if upright and (not flat or upright[0] > flat[0]):
+            size, lines = upright
+            return [text(cx, cy + size / 3 + (n - (len(lines) - 1) / 2) * size * 1.12, size, line, turn=True) for n, line in enumerate(lines)] if len(lines) == 1 else \
+                   [f'<g transform="rotate(-90 {cx} {cy})">' + ''.join(block(cy, size, lines, 'bold')) + '</g>']
+        size, lines = flat or (7, [title])
+        return block(cy, size, lines, 'bold')
+    number = min(19, w_ * 0.9 / (len(ref) * 0.58), h_ * 0.34)
+    rest = fit_block(title, w_, h_ - number * 1.25, 13, 5)
+    if not rest:
+        return [text(cx, cy + number / 3, number, ref)]
+    size, lines = rest
+    total = number * 1.15 + len(lines) * size * 1.12
+    top = cy - total / 2
+    return [text(cx, top + number * 0.92, number, ref)] + block(top + number * 1.15 + len(lines) * size * 1.12 / 2, size, lines, 'normal')
+
+
 def main(argv):
     src, dst = argv[0], argv[1]
     opts = dict(zip(argv[2::2], argv[3::2]))
@@ -76,7 +146,7 @@ def main(argv):
     if shape:
         svg.append(f'<path d="{shape}" fill="#F7F9FD" fill-rule="evenodd" stroke="#6F7FA8" stroke-width="3.5" stroke-linejoin="round"/>')
     for r in f['rooms']:
-        if r['ref']:
+        if r['ref'] or r.get('office'):
             fill, line = '#D3DEF8', '#7F90C0'
         elif r.get('title'):
             fill, line = '#E3DDF1', '#7F90C0'
@@ -88,22 +158,7 @@ def main(argv):
     for sx, sy in f.get('stairs', []):
         svg.append(f'<path d="M{sx - 9} {sy + 9}H{sx - 3}V{sy + 3}H{sx + 3}V{sy - 3}H{sx + 9}V{sy - 9}" fill="none" stroke="#3B6FE6" stroke-width="3.5"/>')
     for r in f['rooms']:
-        text = f"{r['ref']} {r['title']}" if r['ref'] and r.get('title') else (r['ref'] or r.get('title') or '')
-        if not text:
-            continue
-        xs = [p[0] for p in r['polygon']]
-        ys = [p[1] for p in r['polygon']]
-        cx, cy = area_centroid(r['polygon'])
-        w_, h_ = max(xs) - min(xs), max(ys) - min(ys)
-
-        def fit(lines):
-            return min(20, w_ * 0.92 / (max(len(line) for line in lines) * 0.58), h_ * 0.8 / (len(lines) * 1.15))
-
-        words = text.split(' ')
-        lines = words if len(words) == 2 and fit(words) > fit([text]) else [text]
-        size = max(fit(lines), 7)
-        for n, line in enumerate(lines):
-            svg.append(f'<text x="{cx}" y="{cy + size / 3 + (n - (len(lines) - 1) / 2) * size * 1.15}" font-size="{size}" font-weight="bold" text-anchor="middle" font-family="Helvetica" fill="#26304A">{line}</text>')
+        svg.extend(label_svg(r))
     svg.append(f'<text x="{x0 + W / 2}" y="{y0 + H - 14}" font-size="26" font-weight="bold" text-anchor="middle" font-family="Helvetica" fill="#6F7FA8">{f["title"]}</text>')
     svg.append('</svg>')
 
