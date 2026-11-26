@@ -123,7 +123,7 @@ def label_svg(room):
         size, lines = flat or (7, [title])
         return block(cy, size, lines, 'bold')
     number = min(19, w_ * 0.9 / (len(ref) * 0.58), h_ * 0.34)
-    rest = fit_block(title, w_, h_ - number * 1.25, 13, 5)
+    rest = fit_block(title, w_, h_ - number * 1.25, 13, 3.5)
     if not rest:
         return [text(cx, cy + number / 3, number, ref)]
     size, lines = rest
