@@ -5,7 +5,7 @@
 Запуск: render_floor.py floor.json out.png [--context context.json]
   --context  серые контуры здания и соседних построек ({"polygons": [...]}): рисуются под этажом и задают общий охват, поэтому
              все этажи получаются в одном масштабе и положении
-Помещения без номера и названия рисуются серыми (на этаже о них нет данных).
+Цвет помещения без номера берётся из исходника: поле tone ('gray' или 'pink'); без него служебный сиреневый.
 """
 import importlib.util
 import json
@@ -22,6 +22,7 @@ spec_.loader.exec_module(ex)
 SIDE = 4000
 GRAY_FILL = '#D6D8DE'
 GRAY_LINE = '#BCC0CB'
+PINK_FILL = '#F5D2D8'
 
 
 def write_png(path, rgb):
@@ -111,7 +112,7 @@ def label_svg(room):
         size = max(7, min(20, w_ * 0.92 / (len(ref) * 0.58), h_ * 0.7))
         return [text(cx, cy + size / 3, size, ref)]
     if title and not ref:
-        largest = 20 if w_ * h_ > 20000 else 14  # крупно только в больших залах
+        largest = 14 if room.get('office') else 20  # кабинеты без номера подписываются мельче служебных помещений
         flat = fit_block(title, w_, h_, largest, 8)
         # вертикально только там, где в строку не помещается читаемо
         upright = fit_block(title, h_, w_, largest, 8) if h_ > w_ * 1.3 and (not flat or flat[0] < 9) else None
@@ -146,12 +147,14 @@ def main(argv):
     if shape:
         svg.append(f'<path d="{shape}" fill="#F7F9FD" fill-rule="evenodd" stroke="#6F7FA8" stroke-width="3.5" stroke-linejoin="round"/>')
     for r in f['rooms']:
-        if r['ref'] or r.get('office'):
-            fill, line = '#D3DEF8', '#7F90C0'
-        elif r.get('title'):
-            fill, line = '#E3DDF1', '#7F90C0'
-        else:
+        if r.get('tone') == 'gray':
             fill, line = GRAY_FILL, '#9BA1B3'
+        elif r.get('tone') == 'pink':
+            fill, line = PINK_FILL, '#7F90C0'
+        elif r['ref'] or r.get('office'):
+            fill, line = '#D3DEF8', '#7F90C0'
+        else:
+            fill, line = '#E3DDF1', '#7F90C0'
         svg.append(f'<polygon points="{" ".join(f"{x},{y}" for x, y in r["polygon"])}" fill="{fill}" stroke="{line}" stroke-width="1.5"/>')
     for (ax, ay), (bx, by) in f.get('walls', []):
         svg.append(f'<path d="M{ax} {ay}L{bx} {by}" stroke="#6F7FA8" stroke-width="3.5" stroke-linecap="square"/>')

@@ -6,7 +6,7 @@
 Описание (JSON):
   {"id", "level", "title", "size": [W, H], "cell": 12,
    "parts": [ {"name", "scale": s, "offset": [dx, dy],          # план = scale * точка кадра + offset
-               "rooms": [ {"ref"?, "title"?, "office"?, "rect": [x0, y0, x1, y1] | "polygon": [[x, y], ...]} ],
+               "rooms": [ {"ref"?, "title"?, "office"?, "tone"?, "rect": [x0, y0, x1, y1] | "polygon": [[x, y], ...]} ],
                "outline": [ polygon, ... ], "stairs": [[x, y], ...], "walls": [[[x, y], [x, y]], ...]} ]}
 
 Проходимые клетки: пол внутри контуров без помещений и без клеток у внутренних стен.
@@ -74,6 +74,8 @@ def main(spec_path, out_path):
             room = {'ref': r.get('ref', ''), 'polygon': [P(p) for p in polygon]}
             if r.get('title'):
                 room['title'] = r['title']
+            if r.get('tone'):
+                room['tone'] = r['tone']  # цвет как в исходнике: 'gray' или 'pink' (помещения без названия)
             if r.get('office'):
                 room['office'] = True  # кабинет без номера: рисуется как аудитория, а не как служебное помещение
             rooms.append(room)
